@@ -9,7 +9,7 @@ class Autonomous_Car:
         self.mission=Mission()
     
     def execute_mission(self):
-        self.mission.excute_mission()
+        self.mission.execute_mission(self.mc)
     def update_mission(self,new_missoin):
         return self.mission.update_mission(new_missoin)
         
