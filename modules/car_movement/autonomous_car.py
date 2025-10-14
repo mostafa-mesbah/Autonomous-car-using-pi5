@@ -1,15 +1,18 @@
-from .arduino_handler import ArduinoCarController
+from .arduino_controller import ArduinoCarController
 from .mission import Mission
-class Autonomous_Car:
-    def __init__(self,stall_speed,max_speed):
-        self.car_stall_speed =stall_speed
-        self.max_speed =max_speed
-        self.car_stop_speed = 0
-        self.mc=ArduinoCarController()
-        self.mission=Mission()
-    
+
+class AutonomousCar:
+    def __init__(self, stall_speed, max_speed, port='/dev/ttyACM0', baudrate=9600):
+        self.stall_speed = stall_speed
+        self.max_speed = max_speed
+        self.controller = ArduinoCarController(port, baudrate)
+        self.mission = Mission()
+
     def execute_mission(self):
-        self.mission.execute_mission(self.mc)
-    def update_mission(self,new_missoin):
-        return self.mission.update_mission(new_missoin)
-        
+        self.mission.execute(self.controller)
+
+    def update_mission(self, new_mission):
+        return self.mission.update(new_mission)
+
+    def stop(self):
+        self.controller.stop()

@@ -1,31 +1,21 @@
-class Mission:
-    def __init__(self,mission = None):
-        self.current_mission = mission
-        self.valid_missions = ("move_forward","move_backward","turn_left","turn_right")
+from .mission_commands import MISSION_MAP
 
-    def update_mission(self,new_missoin)-> bool:
-        if new_missoin in self.valid_missions:
-            self.current_mission = new_missoin
-            print("mission updated")
+class Mission:
+    def __init__(self, mission=None):
+        self.current_mission = mission
+
+    def update(self, new_mission):
+        if new_mission in MISSION_MAP:
+            self.current_mission = new_mission
+            print(f"[MISSION] Updated to '{new_mission}'")
             return True
-        else:
-            print("invalid_mission")
-            return False
-        
-    def execute_mission(self, car_controller):
-        print(f"executing mission: {self.current_mission}")
-        
-        if self.current_mission == "move_forward":
-            car_controller.forward()
-        elif self.current_mission == "move_backward":
-            car_controller.backward()
-        elif self.current_mission == "turn_left":
-            car_controller.left()
-        elif self.current_mission == "turn_right":
-            car_controller.right()
-        else:
-            print(f"No action defined for mission: {self.current_mission}")
-            print("car will stop")
-            car_controller.stop()
-        
-        
+        print(f"[MISSION] Invalid mission: '{new_mission}'")
+        return False
+
+    def execute(self, controller):
+        if not self.current_mission:
+            print("[MISSION] No mission set.")
+            return
+        action = MISSION_MAP.get(self.current_mission)
+        print(f"[MISSION] Executing '{self.current_mission}'")
+        action(controller)
