@@ -14,15 +14,15 @@ def detection_loop(car):
                     print(f"[DETECTED] {cls} ({conf:.2f})")
 
                     # Automatic actions based on detection
-                    if cls.lower() == "red_light" and conf > 0.6:
+                    if cls.lower() == "red_light" and conf > 0.7:
                         print("[ACTION] Red light detected! Stopping car...")
                         car.update_mission("s")
                         car.execute_mission()
-                    elif cls.lower() == "green_light" and conf > 0.6:
+                    elif cls.lower() == "green_light" and conf > 0.7:
                         print("[ACTION] Green light detected! Moving forward...")
                         car.update_mission("f")
                         car.execute_mission()
-                    elif cls.lower() == "bump_sign" and conf > 0.6:
+                    elif cls.lower() == "bump_sign" and conf > 0.7:
                         print("[ACTION] Bump detected! Slowing down...")
                         car.update_mission("speed=50")
                         car.execute_mission()
@@ -42,7 +42,7 @@ def main():
 
     # Start detection loop in another thread
     detection_thread = threading.Thread(target=detection_loop, args=(car,), daemon=True)
-    #detection_thread.start()
+    detection_thread.start()
     
     # Main thread handles user input
     while True:

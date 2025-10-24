@@ -8,8 +8,9 @@ import threading
 
 class ModelControl:
     def __init__(self, path, width=640, height=480, infer_size=(320, 320)):
+        self.lock = threading.Lock()
         self.model_path = path
-        self.default_conf = 0.6
+        self.default_conf = 0.8
         self.infer_size = infer_size
         
         # Initialize camera
@@ -34,29 +35,30 @@ class ModelControl:
                            mimetype='multipart/x-mixed-replace; boundary=frame')
 
     def capture_and_detect(self):
-        frame = self.picam2.capture_array()
-        results = self.model(frame, imgsz=self.infer_size, conf=self.default_conf, verbose=False)
+        with self.lock:
+            frame = self.picam2.capture_array()
+            results = self.model(frame, imgsz=self.infer_size, conf=self.default_conf, verbose=False)
 
-        detections = []  # To store detected classes and confidence
+            detections = []  # To store detected classes and confidence
 
-        # Draw boxes and labels
-        for r in results:
-            for box in r.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
-                cls = int(box.cls.cpu().item())
-                conf = box.conf.cpu().item()
-                label = f"{self.model.names[cls]} {conf:.2f}"
+            # Draw boxes and labels
+            for r in results:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+                    cls = int(box.cls.cpu().item())
+                    conf = box.conf.cpu().item()
+                    label = f"{self.model.names[cls]} {conf:.2f}"
 
-                # Append detection info
-                detections.append((self.model.names[cls], conf))
+                    # Append detection info
+                    detections.append((self.model.names[cls], conf))
 
-                # Draw on frame
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(frame, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    # Draw on frame
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, label, (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # Return both the frame and the detections
-        return frame, detections
+            # Return both the frame and the detections
+            return frame, detections
 
     def generate_frames(self):
         """Continuously capture frames and yield them as JPEG for the HTTP stream."""
