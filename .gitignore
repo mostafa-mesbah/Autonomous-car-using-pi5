@@ -1,0 +1,39 @@
+# Python cache / build files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# Model weights and large binary files
+modules/ai_model/*.pt
+modules/ai_model/*.torchscript
+modules/ai_model/*_model/
+modules/ai_model/*.bin
+modules/ai_model/*.param
+modules/ai_model/*.onnx
+
+# System / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Temporary or generated files
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Jupyter notebooks checkpoints (if any)
+.ipynb_checkpoints/
+
+# If you ever store camera frames or output logs
+output/
+data/
+logs/
