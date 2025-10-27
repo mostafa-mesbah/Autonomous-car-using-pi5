@@ -2,10 +2,12 @@ from modules.car_movement.autonomous_car import AutonomousCar
 import threading
 import time
 thread_running = False
+latest_mission = None
 def detection_loop(car):
     """Continuously capture frames, detect signs, and take automatic action."""
+    global latest_mission
     global thread_running
-    while  not thread_running:
+    while thread_running:
         try:
             frame, detections = car.model.capture_and_detect()
             if detections:
@@ -19,7 +21,8 @@ def detection_loop(car):
                         car.execute_mission("s")
                     elif cls.lower() == "green_light" and conf > 0.7:
                         print("[ACTION] Green light detected! Moving forward...")
-                        car.execute_mission("f")
+                        if latest_mission != "s":
+                            car.execute_mission("f")
                     elif cls.lower() == "bump_sign" and conf > 0.7:
                         print("[ACTION] Bump detected! Slowing down...")
                         car.execute_mission("speed=70")
@@ -45,7 +48,8 @@ def main():
     while True:
         mission_input = input("Enter something or (stop): ")
         print(f"You entered: {mission_input}")
-        
+        global latest_mission
+        latest_mission = mission_input
         if mission_input.lower() == 'stop':
             print("Goodbye!")
             car.stop()
@@ -61,10 +65,15 @@ def main():
             except ValueError:
                 print("❌ Invalid speed value. Use: speed=100")
 
-        else:
-                car.execute_mission(mission_input)
-                thread_running = True
-                detection_thread = threading.Thread(target=detection_loop, args=(car,), daemon=True)
-                detection_thread.start()
+        else:   
+                #if mission_input != "s":
+                    car.execute_mission(mission_input)
+                    thread_running = True
+                    detection_thread = threading.Thread(target=detection_loop, args=(car,), daemon=True)
+                    detection_thread.start()
+                #else:
+                    #thread_running = False
+                    #car.execute_mission(mission_input)
+
 if __name__ == "__main__":
     main()
