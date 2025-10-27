@@ -1,16 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[48]:
-
-
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import cv2
-
-# In[118]:
-
 
 def remove_red_lab(img, a_shift=-10):
     # img in RGB uint8
@@ -38,7 +32,7 @@ def dynamic_binary(img_bgr, use_percentile=False, pct_low=0.5, pct_high=99.5, mo
         high = int(gray.max())
 
     thresh = (int(low) + int(high)) // 2
-
+    thresh = 90
     _, binary = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
 
     # morphological cleanup: open then dilate
@@ -88,39 +82,32 @@ def lane_balance_metrics(bin01):
         signed_normalized = (left_black - right_black) / total_black
 
     return diff_share_pct
-    # return {
-    #     "left_black": left_black,
-    #     "right_black": right_black,
-    #     "left_occupancy_pct": left_occupancy_pct,
-    #     "right_occupancy_pct": right_occupancy_pct,
-    #     "left_share_pct": left_share_pct,
-    #     "right_share_pct": right_share_pct,
-    #     "diff_share_pct": diff_share_pct,
-    #     "signed_normalized": signed_normalized,
-    # }
 
-# In[125]:
-  
-def process_lane(frame, roi_start=None, threshold=40):  
-    """  
-    Process a frame for lane detection and return steering decision.  
-      
-    Args:  
-        frame: BGR frame from camera  
-        roi_start: Row to start ROI (crops top portion), e.g., 300  
-        threshold: Decision threshold for turning  
-          
-    Returns:  
-        decision: 'straight', 'left', or 'right'  
-        diff_share_pct: The balance metric value  
-    """  
+
+def process_lane(frame, roi_start=None, threshold=40, keep_edges_only=True, edge_width=50):  
+    h = frame.shape[0]
+    if roi_start is None:
+        roi_start = int(h * 0.75)
+
+    # Extract region of interest (bottom part)
+    roi_color = frame[roi_start:, :]
+    
+    # Keep only the edges
+    if keep_edges_only:
+        h_roi, w_roi = roi_color.shape[:2]
+        left_edge = roi_color[:, :edge_width]      # 0 to edge_width
+        right_edge = roi_color[:, w_roi-edge_width:]   # w_roi-edge_width to end
+        
+        # Combine left and right edges into one image
+        roi_color = np.hstack((left_edge, right_edge))
+    
+    cv2.imwrite("roi_color_edges.jpg", roi_color)
+    print(f"[DEBUG] Saved edges-only ROI: left 0-{edge_width}px + right {w_roi-edge_width}-{w_roi}px")
+
     # Apply binary threshold  
-    binary = dynamic_binary(frame, use_percentile=True, pct_low=0.1)  
+    binary = dynamic_binary(roi_color, use_percentile=True, pct_low=0.1)  
       
-    # Crop to region of interest if specified  
-    if roi_start:  
-        binary = binary[roi_start:, :]
-        cv2.imwrite("cropped_binary.jpg", (binary * 255).astype(np.uint8))
+    cv2.imwrite("edges_binary.jpg", (binary * 255).astype(np.uint8))
       
     # Get lane balance metric  
     diff_share_pct = lane_balance_metrics(binary)  
@@ -129,8 +116,8 @@ def process_lane(frame, roi_start=None, threshold=40):
     if abs(diff_share_pct) <= threshold:  
         decision = 'straight'  
     elif diff_share_pct > threshold:  
-        decision = 'right'  # left side has more lane, turn right  
+        decision = 'right'
     else:  
-        decision = 'left'   # right side has more lane, turn left  
+        decision = 'left'
       
     return decision, diff_share_pct

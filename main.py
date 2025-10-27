@@ -43,7 +43,7 @@ def detection_loop(car):
     while thread_running:
             frame, detections = car.model.capture_and_detect()
             # Process lane detection  
-            lane_decision, lane_metric = process_lane(frame,roi_start=200, threshold=40) 
+            lane_decision, lane_metric = process_lane(frame,roi_start=300, threshold=40,edge_width= 50) 
             print(f"[LANE] Metric: {lane_metric:.1f}, Decision: {lane_decision}")
             if lane_decision == 'straight':
                     check_traffic(detections) 
@@ -90,14 +90,14 @@ def main():
                 print("❌ Invalid speed value. Use: speed=100")
 
         else:   
-                #if mission_input != "s":
+                if mission_input != "s":
                     car.execute_mission(mission_input)
                     thread_running = True
                     detection_thread = threading.Thread(target=detection_loop, args=(car,), daemon=True)
                     detection_thread.start()
-                #else:
-                    #thread_running = False
-                    #car.execute_mission(mission_input)
+                else:
+                    thread_running = False
+                    car.execute_mission(mission_input)
 
 if __name__ == "__main__":
     main()
