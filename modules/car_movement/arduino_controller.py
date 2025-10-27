@@ -3,63 +3,77 @@ import serial
 import sys
 
 class ArduinoCarController:
+    """
+    Controller for communicating with the Arduino-based car over serial.
+    Supports movement commands, speed control, and GPS mode toggling.
+    """
+
     COMMANDS = {
-        'F': 'FORWARD',
-        'B': 'BACKWARD',
-        'L': 'LEFT',
-        'R': 'RIGHT',
-        'S': 'STOP',
-        '+': 'INCREASE_SPEED',
-        '-': 'DECREASE_SPEED'
+        'f': 'move forward',
+        'b': 'move backward',
+        's': 'stop',
+        'l': 'turn left',
+        'r': 'turn right',
+        'rl': 'roll left',
+        'rr': 'roll right',
+        'g': 'toggle gps mode'
     }
 
     def __init__(self, port='/dev/ttyACM0', baudrate=115200):
+        """Initialize serial connection to Arduino."""
         self.port = port
         self.baudrate = baudrate
         try:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
-            time.sleep(2)
-            print(f"[INFO] Connected to Arduino on {self.port}")
+            time.sleep(2)  # Allow Arduino to reset after connection
+            print(f"[info] connected to arduino on {self.port}")
         except Exception as e:
-            print(f"[ERROR] Failed to connect to Arduino: {e}")
+            print(f"[error] failed to connect to arduino: {e}")
             sys.exit(1)
 
     def send_command(self, command):
-        # Accept direct "speed=xxx" command or single-letter mission
+        """Send a command to Arduino and read its response."""
         if not command:
             return
 
-
-        # Handle speed command
-        if command.lower().startswith("speed="):
-            print(f"[SEND] Setting speed -> {command}")
+        # Handle speed command (e.g., "speed=180")
+        if command.startswith("speed="):
+            print(f"[send] setting speed -> {command}")
             self.ser.write(f"{command}\n".encode())
-            return
 
-        # Handle normal mission commands
-        if command in self.COMMANDS:
-            print(f"[SEND] {self.COMMANDS[command]}")
+        # Handle movement and gps commands
+        elif command in self.COMMANDS:
+            print(f"[send] {self.COMMANDS[command]}")
             self.ser.write(f"{command}\n".encode())
+
         else:
-            print(f"[WARN] Unknown command: {command}")
+            print(f"[warn] unknown command: {command}")
             return
 
+        # Read response (if available)
         time.sleep(0.1)
         if self.ser.in_waiting:
             try:
                 response = self.ser.read(self.ser.in_waiting).decode(errors='ignore').strip()
                 if response:
-                    print(f"[ARDUINO] {response}")
+                    print(f"[arduino] {response}")
             except Exception as e:
-                print(f"[WARN] Failed to read response: {e}")
+                print(f"[warn] failed to read response: {e}")
 
-    def forward(self): self.send_command('F')
-    def backward(self): self.send_command('B')
-    def left(self): self.send_command('L')
-    def right(self): self.send_command('R')
-    def stop(self): self.send_command('S')
-    def increase_speed(self): self.send_command('+')
-    def decrease_speed(self): self.send_command('-')
+    # === Movement wrappers ===
+    def forward(self): self.send_command('f')
+    def backward(self): self.send_command('b')
+    def stop(self): self.send_command('s')
+    def turn_left(self): self.send_command('l')
+    def turn_right(self): self.send_command('r')
+    def roll_left(self): self.send_command('rl')
+    def roll_right(self): self.send_command('rr')
+    def toggle_gps(self): self.send_command('g')
+
+    # === Speed control ===
+    def set_speed(self, value): self.send_command(f"speed={value}")
+
+    # === Close connection ===
     def close(self):
         self.ser.close()
-        print("[INFO] Connection closed")
+        print("[info] connection closed")
