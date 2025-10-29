@@ -1,10 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# In[48]:
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import cv2
+
+# In[118]:
+
 
 def remove_red_lab(img, a_shift=-10):
     # img in RGB uint8
@@ -32,7 +38,7 @@ def dynamic_binary(img_bgr, use_percentile=False, pct_low=0.5, pct_high=99.5, mo
         high = int(gray.max())
 
     thresh = (int(low) + int(high)) // 2
-    thresh = 90
+
     _, binary = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
 
     # morphological cleanup: open then dilate
@@ -82,42 +88,84 @@ def lane_balance_metrics(bin01):
         signed_normalized = (left_black - right_black) / total_black
 
     return diff_share_pct
+    # return {
+    #     "left_black": left_black,
+    #     "right_black": right_black,
+    #     "left_occupancy_pct": left_occupancy_pct,
+    #     "right_occupancy_pct": right_occupancy_pct,
+    #     "left_share_pct": left_share_pct,
+    #     "right_share_pct": right_share_pct,
+    #     "diff_share_pct": diff_share_pct,
+    #     "signed_normalized": signed_normalized,
+    # }
 
-
-def process_lane(frame, roi_start=None, threshold=40, keep_edges_only=True, edge_width=50):  
-    h = frame.shape[0]
-    if roi_start is None:
-        roi_start = int(h * 0.75)
-
-    # Extract region of interest (bottom part)
-    roi_color = frame[roi_start:, :]
-    
-    # Keep only the edges
-    if keep_edges_only:
-        h_roi, w_roi = roi_color.shape[:2]
-        left_edge = roi_color[:, :edge_width]      # 0 to edge_width
-        right_edge = roi_color[:, w_roi-edge_width:]   # w_roi-edge_width to end
-        
-        # Combine left and right edges into one image
-        roi_color = np.hstack((left_edge, right_edge))
-    
-    cv2.imwrite("roi_color_edges.jpg", roi_color)
-    print(f"[DEBUG] Saved edges-only ROI: left 0-{edge_width}px + right {w_roi-edge_width}-{w_roi}px")
-
-    # Apply binary threshold  
-    binary = dynamic_binary(roi_color, use_percentile=True, pct_low=0.1)  
+# In[125]:
+  
+def process_lane(frame, roi_start=350, threshold=25, base_speed=180, max_turn_speed=250, min_turn_speed=40):  
+    """  
+    Process a frame for lane detection and return steering decision with wheel speeds.  
       
-    cv2.imwrite("edges_binary.jpg", (binary * 255).astype(np.uint8))
+    Args:  
+        frame: BGR frame from camera  
+        roi_start: Row to start ROI (crops top portion), e.g., 300  
+        threshold: Decision threshold for turning  
+        base_speed: Base speed when going straight (both wheels)  
+        max_turn_speed: Maximum speed for turning wheel  
+        min_turn_speed: Minimum speed for turning wheel  
+          
+    Returns:  
+        decision: 'straight', 'left', or 'right'  
+        left_speed: PWM speed for left wheel (0-255)  
+        right_speed: PWM speed for right wheel (0-255)  
+        diff_share_pct: The balance metric value  
+    """  
+    # Apply binary threshold  
+    frame = cv2.flip(frame, -1)
+    frame = frame[roi_start:, :]
+    cv2.imwrite("cropped_real.jpg", frame)
+    binary = dynamic_binary(frame, use_percentile=True, pct_low=0.1)  
+      
+    # Crop to region of interest if specified  
+    if roi_start:  
+        cv2.imwrite("cropped_binary.jpg", (binary * 255).astype(np.uint8))
       
     # Get lane balance metric  
     diff_share_pct = lane_balance_metrics(binary)  
       
-    # Make decision  
+    # Calculate wheel speeds based on lane imbalance
     if abs(diff_share_pct) <= threshold:  
-        decision = 'straight'  
+        decision = 'straight'
+        # Both wheels same speed when going straight
+        left_speed = base_speed
+        right_speed = base_speed
     elif diff_share_pct > threshold:  
+        # Left side has more black lane, turn RIGHT
         decision = 'right'
+        # Calculate turn intensity (0.0 to 1.0) based on how much black is on left
+        turn_intensity = min(abs(diff_share_pct) / 100.0, 1.0)
+        
+        # For right turn: left wheel faster, right wheel slower
+        # More black on left = sharper turn = bigger speed difference
+        speed_difference = int(turn_intensity * (max_turn_speed - min_turn_speed))
+        
+        left_speed = min(base_speed + speed_difference, max_turn_speed)
+        right_speed = max(base_speed - speed_difference, min_turn_speed)
     else:  
+        # Right side has more black lane, turn LEFT
         decision = 'left'
+        # Calculate turn intensity (0.0 to 1.0) based on how much black is on right
+        turn_intensity = min(abs(diff_share_pct) / 100.0, 1.0)
+        
+        # For left turn: right wheel faster, left wheel slower
+        # More black on right = sharper turn = bigger speed difference
+        speed_difference = int(turn_intensity * (max_turn_speed - min_turn_speed))
+        
+        right_speed = min(base_speed + speed_difference, max_turn_speed)
+        left_speed = max(base_speed - speed_difference, min_turn_speed)
+    
+    # Ensure speeds are within valid range
+    left_speed = max(0, min(255, left_speed))
+    right_speed = max(0, min(255, right_speed))
       
-    return decision, diff_share_pct
+    print(f"[LANE] Decision: {decision}, L: {left_speed}, R: {right_speed}, Imbalance: {diff_share_pct:.1f}%")
+    return decision, right_speed ,left_speed
