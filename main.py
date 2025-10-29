@@ -48,7 +48,7 @@ def detection_loop(car):
         frame, detections = car.model.capture_and_detect()
         
         # Process lane detection - now returns decision and wheel speeds
-        lane_decision, left_speed, right_speed = process_lane(frame) 
+        lane_decision,  right_speed, left_speed= process_lane(frame) 
         print(f"Lane Decision: {lane_decision}, L: {left_speed}, R: {right_speed}")
         
         # Check traffic signs first (higher priority)

@@ -14,7 +14,7 @@ class Mission:
             return True, new_mission
           
         # Handle turn commands with wheel speeds (e.g., "l 150 50", "r 180 20")
-        if new_mission.startswith("l ") or new_mission.startswith("r "):
+        if new_mission.startswith("t ") :
             parts = new_mission.split()
             if len(parts) == 3:
                 try:
