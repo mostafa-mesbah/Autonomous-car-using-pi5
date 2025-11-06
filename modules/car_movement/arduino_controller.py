@@ -44,8 +44,7 @@ class ArduinoCarController:
                     left_pwm = int(parts[1])
                     right_pwm = int(parts[2])
                     if 0 <= left_pwm <= 255 and 0 <= right_pwm <= 255:
-                        direction = "left" if command.startswith("l ") else "right"
-                        print(f"[send] turn {direction} -> L:{left_pwm} R:{right_pwm}")
+                        print(f"L:{left_pwm} R:{right_pwm}")
                         self.ser.write(f"{command}\n".encode())
                     else:
                         print(f"[warn] PWM values must be 0-255: {command}")
@@ -55,17 +54,14 @@ class ArduinoCarController:
                 print(f"[warn] invalid turn command format: {command}")
 
         # Handle both wheels speed command (e.g., "both=180", "speed=150")
-        elif command.startswith("both=") or command.startswith("speed="):
-            try:
-                value = int(command.split('=')[1])
-                if 0 <= value <= 255:
-                    cmd_type = "both" if command.startswith("both=") else "speed"
-                    print(f"[send] set {cmd_type} wheels speed -> {value}")
-                    self.ser.write(f"{command}\n".encode())
-                else:
-                    print(f"[warn] speed must be 0-255: {command}")
-            except ValueError:
-                print(f"[warn] invalid speed value: {command}")
+        elif  command.startswith("speed="):
+            value = int(command.split('=')[1])
+            if 0 <= value <= 255:
+                cmd_type = "speed"
+                print(f"[send] set {cmd_type} wheels speed -> {value}")
+                self.ser.write(f"{command}\n".encode())
+            else:
+                print(f"[warn] speed must be 0-255: {command}")
 
         # Handle basic movement and gps commands
         elif command in self.COMMANDS:
@@ -90,23 +86,8 @@ class ArduinoCarController:
     def forward(self): self.send_command('f')
     def backward(self): self.send_command('b')
     def stop(self): self.send_command('s')
-    def turn_left(self): self.send_command('l')
-    def turn_right(self): self.send_command('r')
     def roll_left(self): self.send_command('rl')
     def roll_right(self): self.send_command('rr')
-    def toggle_gps(self): self.send_command('g')
-
-    # === Speed control ===
-    def set_speed(self, value): self.send_command(f"both={value}")
-    
-    # === Turn with specific wheel speeds ===
-    def turn_left_with_speeds(self, left_pwm, right_pwm): 
-        self.send_command(f"l {left_pwm} {right_pwm}")
-    
-    def turn_right_with_speeds(self, left_pwm, right_pwm): 
-        self.send_command(f"r {left_pwm} {right_pwm}")
-
-    # === Close connection ===
     def close(self):
         self.ser.close()
         print("[info] connection closed")
