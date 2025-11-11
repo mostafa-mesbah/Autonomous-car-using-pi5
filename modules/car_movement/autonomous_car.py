@@ -3,8 +3,9 @@ from .mission import Mission
 from  modules.ai_model.model import ModelControl
 import threading
 from ..lane_detector.lane import process_lane
+import time
 class AutonomousCar:
-    def __init__(self, stall_speed, max_speed,current_speed, model_path,port='/dev/ttyACM0', baudrate=115200):
+    def __init__(self, stall_speed=50, max_speed=255,current_speed=100, model_path="modules/ai_model/best_from_kaggle_v1.pt",port='/dev/ttyACM0', baudrate=115200):
         self.stall_speed = stall_speed
         self.current_mission='s'
         self.normal_speed=100
@@ -46,15 +47,23 @@ class AutonomousCar:
                 print(f"[STREAM] Streaming started in thread on http://{host}:{port}/")
                 
     def start_autonomous_mode(self):
-        if self.autonomous_mode_thread is None:
-            self.autonomous_mode_thread = threading.Thread(target=self.start_autonomous_control,daemon=True)
-            self.autonomous_mode_thread_running = True
-            self.autonomous_mode_thread.start()
-            print("[AUTONOMOUS MODE] Autonomous mode started in thread.")
+        self.autonomous_mode_thread = threading.Thread(target=self.start_autonomous_control,daemon=True)
+        self.autonomous_mode_thread_running = True
+        self.autonomous_mode_thread.start()
+        print("[AUTONOMOUS MODE] Autonomous mode started in thread.")
+        while True:
+            cc=input().strip().lower()
+            if cc == 's':
+                self.stop_autonomous_mode()
+                break
+            else:
+                self.execute_mission(cc)
+
 
     def stop_autonomous_mode(self):
-        if self.autonomous_mode_thread is not None:
             self.autonomous_mode_thread_running = False
+            self.execute_mission("s")
+            self.execute_mission("s")
     
     def capture_frame(self):
         return self.model.capture()
@@ -83,22 +92,7 @@ class AutonomousCar:
                 else:
                     print("❌ Invalid turn command format. Use: 't 150 20' or 't 200 100'")
         
-            # Handle speed commands
-            elif mission_input.startswith("speed="):
-                try:
-                    if mission_input.startswith("speed="):
-                        value = int(mission_input.split('=')[1])
-                    else:  # both=
-                        value = int(mission_input.split('=')[1])
-                        
-                    if 0 <= value <= 255:
-                        self.execute_mission(mission_input)
-                    else:
-                        print("❌ Speed must be between 0 and 255.")
-                except ValueError:
-                    print("❌ Invalid speed value. Use: 'speed=100' or 'both=100'")
-        
-            elif mission_input in ['f', 'b', 's', 'l', 'r', 'rl', 'rr', 'g']:
+            elif mission_input in ['f', 'b', 's', 'rl', 'rr']:
                 self.execute_mission(mission_input)
             
             else:
@@ -123,26 +117,23 @@ class AutonomousCar:
 
         while self.autonomous_mode_thread_running:
             frame = self.capture_frame()
-            
+            t0 = time.perf_counter()
+            mission, direction, angle = process_lane(frame)
+            lane_time = time.perf_counter() - t0
+            t1 = time.perf_counter()
+            detections = self.model.detect(frame)
+            detect_time = time.perf_counter() - t1
 
-            lane_decision,  right_speed, left_speed= process_lane(frame) 
-            detections=self.model.detect(frame)
+            print(f"Detection time: {detect_time*1000:.2f} ms")
+            total_time = time.perf_counter() - t0
+            fps = 1.0 / total_time if total_time > 0 else 0
+
             traffic_decision = self.check_traffic(detections)
-            
+
             if traffic_decision:
-                # Traffic sign has priority
                 self.execute_mission(traffic_decision)
             else:
-                # Follow lane detection with calculated wheel speeds
-                if lane_decision == 'straight':
-                    # Use the calculated speeds for straight driving
-                    self.execute_mission(f"t {left_speed} {right_speed}")  
-                elif lane_decision == 'left':
-                    # Use the calculated speeds for left turn
-                    self.execute_mission(f"t {left_speed} {right_speed}")
-                elif lane_decision == 'right':
-                    # Use the calculated speeds for right turn
-                    self.execute_mission(f"t {left_speed} {right_speed}")
+                self.execute_mission(mission)
     
     def check_traffic(self,detections):  
         if not detections:  

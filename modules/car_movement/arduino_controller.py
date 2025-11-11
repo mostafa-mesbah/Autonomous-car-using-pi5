@@ -44,7 +44,7 @@ class ArduinoCarController:
                     left_pwm = int(parts[1])
                     right_pwm = int(parts[2])
                     if 0 <= left_pwm <= 255 and 0 <= right_pwm <= 255:
-                        print(f"L:{left_pwm} R:{right_pwm}")
+                        #print(f"L:{left_pwm} R:{right_pwm}")
                         self.ser.write(f"{command}\n".encode())
                     else:
                         print(f"[warn] PWM values must be 0-255: {command}")
@@ -53,20 +53,19 @@ class ArduinoCarController:
             else:
                 print(f"[warn] invalid turn command format: {command}")
 
-        # Handle both wheels speed command (e.g., "both=180", "speed=150")
-        elif  command.startswith("speed="):
-            value = int(command.split('=')[1])
-            if 0 <= value <= 255:
-                cmd_type = "speed"
-                print(f"[send] set {cmd_type} wheels speed -> {value}")
-                self.ser.write(f"{command}\n".encode())
+        elif command.startswith("f "):
+            parts = command.split()
+            if len(parts) == 2:
+                try:
+                    speed_pwm = int(parts[1])
+                    if 0 <= speed_pwm <= 255 :
+                        self.ser.write(f"{command}\n".encode())
+                    else:
+                        print(f"[warn] PWM values must be 0-255: {command}")
+                except ValueError:
+                    print(f"[warn] invalid PWM values: {command}")
             else:
-                print(f"[warn] speed must be 0-255: {command}")
-
-        # Handle basic movement and gps commands
-        elif command in self.COMMANDS:
-            print(f"[send] {self.COMMANDS[command]}")
-            self.ser.write(f"{command}\n".encode())
+                print(f"[warn] invalid turn command format: {command}")
 
         else:
             print(f"[warn] unknown command: {command}")
@@ -78,7 +77,8 @@ class ArduinoCarController:
             try:
                 response = self.ser.read(self.ser.in_waiting).decode(errors='ignore').strip()
                 if response:
-                    print(f"[arduino] {response}")
+                    pass
+                    #print(f"[arduino] {response}")
             except Exception as e:
                 print(f"[warn] failed to read response: {e}")
 

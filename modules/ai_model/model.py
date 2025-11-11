@@ -42,20 +42,17 @@ class ModelControl:
     def detect(self,frame):
         detections = [] 
         results = self.model(frame, imgsz=self.infer_size, conf=self.default_conf, verbose=False)# To store detected classes and confidence
-        for r in results:
-                for box in r.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
-                    cls = int(box.cls.cpu().item())
-                    conf = box.conf.cpu().item()
-                    label = f"{self.model.names[cls]} {conf:.2f}"
-
-                    # Append detection info
-                    detections.append((self.model.names[cls], conf))
-
-                    # Draw on frame
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, label, (x1, y1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        for box in results[0].boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+                cls = int(box.cls.cpu().item())
+                conf = box.conf.cpu().item()
+                label = f"{self.model.names[cls]} {conf:.2f}"
+                # Append detection info
+                detections.append((self.model.names[cls], conf))
+                # Draw on frame
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(frame, label, (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         return detections
 
     def generate_frames(self,frame,detections):
