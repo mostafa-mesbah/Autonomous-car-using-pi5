@@ -146,22 +146,22 @@ def classify_turn_with_direction(angle):
     if 160 >=angle >= 25:
         direction = "straign"
         mission="f 0"
-        #mission="f 150"
+        mission="f 150"
     elif 170>=angle >160:
         mission="f 0"
-        #mission="t 50 150"
+        mission="t 50 150"
         direction = "left"
     elif 180>=angle >170:
         mission="f 0"
-        #mission="t 70 200"
+        mission="t 70 200"
         direction = "sharp left"
     elif 25>angle >=15:
         mission="f 0"
-        #mission="t 150 50"
+        mission="t 150 50"
         direction = "right"
     elif 15>angle >=0:
         mission="f 0"
-        #mission="t 210 70"
+        mission="t 210 70"
         direction = "sharp right"
     return mission,direction,angle
 
@@ -209,7 +209,6 @@ def process_lane(frame):
         angle = compute_line_angle(longest_line)
         #print(f"Angle of the line: {angle:.2f}°")
         return classify_turn_with_direction(angle)
-        time.sleep(0.1)
     else:
         print("No valid lines detected.")
         return 's',"stop"

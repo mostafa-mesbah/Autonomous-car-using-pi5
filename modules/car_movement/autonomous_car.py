@@ -5,7 +5,7 @@ import threading
 from ..lane_detector.lane import process_lane
 import time
 class AutonomousCar:
-    def __init__(self, stall_speed=50, max_speed=255,current_speed=100, model_path="modules/ai_model/best_from_kaggle_v1.pt",port='/dev/ttyACM0', baudrate=115200):
+    def __init__(self, stall_speed=50, max_speed=255,current_speed=100, model_path="~/graduation_project/Autonomous-car-using-pi5/modules/ai_model/best_traffic_signs.pt",port='/dev/ttyACM0', baudrate=115200):
         self.stall_speed = stall_speed
         self.current_mission='s'
         self.normal_speed=100
@@ -16,7 +16,8 @@ class AutonomousCar:
         self.stream_thread = None  # Thread placeholder
         self.autonomous_mode_thread = None
         self.stream_thread_running =False
-        self.autonomous_mode_thread_running =False
+        self.autonomous_mode_lane_running =False
+        self.autonomous_mode_traffic_running = False
         self.controller = ArduinoCarController(port, baudrate)
         self.mission = Mission()
         self.model=ModelControl(self.model_path)
@@ -47,12 +48,28 @@ class AutonomousCar:
                 print(f"[STREAM] Streaming started in thread on http://{host}:{port}/")
                 
     def start_autonomous_mode(self):
-        self.autonomous_mode_thread = threading.Thread(target=self.start_autonomous_control,daemon=True)
-        self.autonomous_mode_thread_running = True
-        self.autonomous_mode_thread.start()
-        print("[AUTONOMOUS MODE] Autonomous mode started in thread.")
+        # allow threads to run
+        self.autonomous_mode_lane_running = True
+        self.autonomous_mode_traffic_running = True
+        # Thread 1: Lane processing
+        self.lane_thread = threading.Thread(
+            target=self.lane_loop,
+            daemon=True
+        )
+
+        # Thread 2: Detection + mission
+        self.detect_thread = threading.Thread(
+            target=self.detect_loop,
+            daemon=True
+        )
+
+        # Start both threads
+        self.lane_thread.start()
+        self.detect_thread.start()
+        print("[AUTONOMOUS MODE] Lane + Detection threads started.")
         while True:
-            cc=input().strip().lower()
+            cc = input().strip().lower()
+
             if cc == 's':
                 self.stop_autonomous_mode()
                 break
@@ -61,7 +78,8 @@ class AutonomousCar:
 
 
     def stop_autonomous_mode(self):
-            self.autonomous_mode_thread_running = False
+            self.autonomous_mode_lane_running = False
+            self.autonomous_mode_traffic_running = False
             self.execute_mission("s")
             self.execute_mission("s")
     
@@ -80,26 +98,9 @@ class AutonomousCar:
                 thread_running = False
                 self.stop()
                 break
-
-                #handel turn commands
-            elif mission_input.startswith("t ") :
-                direction, left_speed, right_speed = self.parse_turn_command(mission_input)
-                if direction and left_speed is not None and right_speed is not None:
-                    if 0 <= left_speed <= 255 and 0 <= right_speed <= 255:
-                        self.execute_mission(mission_input)
-                    else:
-                        print("❌ Speed values must be between 0 and 255.")
-                else:
-                    print("❌ Invalid turn command format. Use: 't 150 20' or 't 200 100'")
-        
-            elif mission_input in ['f', 'b', 's', 'rl', 'rr']:
-                self.execute_mission(mission_input)
-            
             else:
-                print("❌ Unknown command. Type 'help' for available commands.")
-                if mission_input.lower() == 'help':
-                    print("Available commands: f, b, s, l, r, rl, rr, ls=<value>, rs=<value>, speed=<value>, g, start_auto, stop_auto, stop")
-
+                self.execute_mission(mission_input)
+               
     def parse_turn_command(self,command):
         """Parse turn commands with wheel speeds like 'l 150 20' or 'r 200 100'"""
         parts = command.split()
@@ -113,51 +114,55 @@ class AutonomousCar:
                 return None, None, None
         return None, None, None
     
-    def start_autonomous_control(self):
-
-        while self.autonomous_mode_thread_running:
+    def lane_loop(self):
+        """Only lane processing."""
+        while self.autonomous_mode_lane_running:
             frame = self.capture_frame()
-            t0 = time.perf_counter()
             mission, direction, angle = process_lane(frame)
-            lane_time = time.perf_counter() - t0
-            t1 = time.perf_counter()
+            self.execute_mission(mission)
+            
+
+
+    def detect_loop(self):
+        """Capture + detection + mission logic."""
+        while self.autonomous_mode_traffic_running:
+            frame = self.capture_frame()
             detections = self.model.detect(frame)
-            detect_time = time.perf_counter() - t1
-
-            print(f"Detection time: {detect_time*1000:.2f} ms")
-            total_time = time.perf_counter() - t0
-            fps = 1.0 / total_time if total_time > 0 else 0
-
             traffic_decision = self.check_traffic(detections)
-
             if traffic_decision:
                 self.execute_mission(traffic_decision)
             else:
-                self.execute_mission(mission)
+                # use latest lane result
+                if hasattr(self, "lane_result"):
+                    mission, direction, angle = self.lane_result
+                    self.execute_mission(mission)
     
-    def check_traffic(self,detections):  
+    def check_traffic(self, detections):  
         if not detections:  
             return None  
         
         # Process detections with priority (highest confidence first)  
-        for cls, conf in sorted(detections, key=lambda x: x[1], reverse=True):  
+        for cls, conf, verts, box_area in sorted(detections, key=lambda x: x[1], reverse=True):  
             cls = cls.lower()  
-            
-            if cls == "red_light" and conf > 0.7:  
-                print(f"[TRAFFIC] Red light detected ({conf:.2f}) - Decision: STOP")  
-                return "s"  
-            
-            elif cls == "green_light" and conf > 0.7:  
-                print(f"[TRAFFIC] Green light detected ({conf:.2f}) - Decision: FORWARD")  
-                return "f"  
-            
-            elif cls == "bump_sign" and conf > 0.7:  
-                print(f"[TRAFFIC] Bump sign detected ({conf:.2f}) - Decision: SLOW DOWN")  
-                return "speed=50"  
-            
-            elif cls == "yellow_sign" and conf > 0.7:  
-                print(f"[TRAFFIC] Bump sign detected ({conf:.2f}) - Decision: SLOW DOWN")  
-                return "speed=50"  
-            
+
+            # Only act if area > 5000
+            if box_area > 5000:
+                if cls == "red_light" and conf > 0.7:  
+                    print(f"[TRAFFIC] Red light detected ({conf:.2f}) - Area: {int(box_area)} - Decision: STOP")
+                    self.autonomous_mode_lane_running = False  
+                    return "s"  
+
+                elif cls == "green_light" and conf > 0.7:  
+                    print(f"[TRAFFIC] Green light detected ({conf:.2f}) - Area: {int(box_area)} - Decision: FORWARD")
+                    self.autonomous_mode_lane_running = True
+                    if not hasattr(self, "lane_thread") or not self.lane_thread.is_alive():
+                        self.lane_thread = threading.Thread(target=self.lane_loop, daemon=True)
+                        self.lane_thread.start()    
+                    return "f"  
+
+                elif cls in ["bump_sign", "yellow_sign"] and conf > 0.7:  
+                    print(f"[TRAFFIC] {cls} detected ({conf:.2f}) - Area: {int(box_area)} - Decision: SLOW DOWN")  
+                    return "speed=50"  
+
         return None  # No actionable detection
 

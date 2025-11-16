@@ -1,21 +1,18 @@
+#!/usr/bin/env python3
 from modules.car_movement.autonomous_car import AutonomousCar
 from modules.lane_detector.lane import process_lane
 import threading
 import time
-
-thread_running = False
-latest_mission = None
-
-
-    
-    
-
-
-
+import os
+import sys
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
 def main():
-    global thread_running
-    car = AutonomousCar(50, 255, 100, "modules/ai_model/best_from_kaggle_v1.pt")
-    #greetings
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "modules", "ai_model", "best_traffic_signs.pt")
+    car = AutonomousCar(50, 255, 100, model_path)
+    car.stream_car()
 
     while True:
         print("Good day! Welcome to the Autonomous Car Control System.")
