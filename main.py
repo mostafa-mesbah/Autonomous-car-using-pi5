@@ -12,7 +12,7 @@ def main():
     model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "modules", "ai_model", "best_traffic_signs.pt")
     car = AutonomousCar(50, 255, 100, model_path)
-    car.stream_car()
+    #car.stream_car()
 
     while True:
         print("Good day! Welcome to the Autonomous Car Control System.")

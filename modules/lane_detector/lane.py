@@ -143,23 +143,23 @@ def classify_turn_with_direction(angle):
     if angle > 180:
         angle_sym = 360 - angle
     
-    if 160 >=angle >= 25:
+    if 150 >=angle >= 25:
         direction = "straign"
         mission="f 0"
         mission="f 150"
-    elif 170>=angle >160:
+    elif 155>=angle >150:
         mission="f 0"
-        mission="t 50 150"
+        mission="t 50 120"
         direction = "left"
-    elif 180>=angle >170:
+    elif 180>=angle >155:
         mission="f 0"
-        mission="t 70 200"
+        mission="t 70 220"
         direction = "sharp left"
-    elif 25>angle >=15:
+    elif 25>angle >=20:
         mission="f 0"
-        mission="t 150 50"
+        mission="t 120 50"
         direction = "right"
-    elif 15>angle >=0:
+    elif 20>angle >=0:
         mission="f 0"
         mission="t 210 70"
         direction = "sharp right"
