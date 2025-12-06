@@ -10,6 +10,21 @@ class Mission:
         if len(new_mission) == 0:
             return False, None
         
+        # === HANDLE GLOBAL SPEED SET ===
+        if new_mission.startswith("speed="):
+            try:
+                new_speed = int(new_mission.split("=")[1])
+                if 0 <= new_speed <= 255:
+                    self.global_speed = new_speed
+                    print(f"[MISSION] Global speed set to {new_speed}")
+                    return True, new_mission
+                else:
+                    print(f"[MISSION] Invalid speed value (0-255 only): '{new_mission}'")
+                    return False, None
+            except ValueError:
+                print(f"[MISSION] Invalid number format: '{new_mission}'")
+                return False, None
+        
         parts = new_mission.split()
         cmd = parts[0]
         
@@ -28,8 +43,9 @@ class Mission:
                     print(f"[MISSION] Invalid number format: '{new_mission}'")
                     return False, None
             elif len(parts) == 1:
-                self.current_mission = new_mission
-                return True, new_mission
+                speed = getattr(self, "global_speed", 150)
+                self.current_mission = f"f {speed}"
+                return True, self.current_mission
             else:
                 print(f"[MISSION] Invalid forward command format. Use: 'f' or 'f 200'")
                 return False, None
@@ -49,52 +65,11 @@ class Mission:
                     print(f"[MISSION] Invalid number format: '{new_mission}'")
                     return False, None
             elif len(parts) == 1:
-                self.current_mission = new_mission
-                return True, new_mission
+                speed = getattr(self, "global_speed", 150)
+                self.current_mission = f"b {speed}"
+                return True, self.current_mission
             else:
                 print(f"[MISSION] Invalid backward command format. Use: 'b' or 'b 200'")
-                return False, None
-        
-        # === ROLL LEFT ===
-        if cmd == "rl":
-            if len(parts) == 2:
-                try:
-                    speed = int(parts[1])
-                    if 0 <= speed <= 255:
-                        self.current_mission = new_mission
-                        return True, new_mission
-                    else:
-                        print(f"[MISSION] Invalid speed value (0-255 only): '{new_mission}'")
-                        return False, None
-                except ValueError:
-                    print(f"[MISSION] Invalid number format: '{new_mission}'")
-                    return False, None
-            elif len(parts) == 1:
-                self.current_mission = new_mission
-                return True, new_mission
-            else:
-                print(f"[MISSION] Invalid roll left command format. Use: 'rl' or 'rl 200'")
-                return False, None
-        
-        # === ROLL RIGHT ===
-        if cmd == "rr":
-            if len(parts) == 2:
-                try:
-                    speed = int(parts[1])
-                    if 0 <= speed <= 255:
-                        self.current_mission = new_mission
-                        return True, new_mission
-                    else:
-                        print(f"[MISSION] Invalid speed value (0-255 only): '{new_mission}'")
-                        return False, None
-                except ValueError:
-                    print(f"[MISSION] Invalid number format: '{new_mission}'")
-                    return False, None
-            elif len(parts) == 1:
-                self.current_mission = new_mission
-                return True, new_mission
-            else:
-                print(f"[MISSION] Invalid roll right command format. Use: 'rr' or 'rr 200'")
                 return False, None
         
         # === TURN ===
@@ -124,9 +99,21 @@ class Mission:
             else:
                 print(f"[MISSION] Invalid stop command format. Use: 's'")
                 return False, None
+
+        # === PARK ===
+        if cmd == "park":
+            if len(parts) == 1:
+                # Add any special behavior for parking here
+                self.current_mission = new_mission
+                print("[MISSION] Parking initiated!")
+                return True, new_mission
+            else:
+                print(f"[MISSION] Invalid park command format. Use: 'park'")
+                return False, None
         
         print(f"[MISSION] Invalid mission: '{new_mission}'")
         return False, None
+
 
     def execute(self, controller, given_mission):  
         if not given_mission:  

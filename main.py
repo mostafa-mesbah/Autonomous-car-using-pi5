@@ -25,8 +25,9 @@ def main():
             print("to start press \"s\"")
 
             if input().strip().lower() == 's':
-                car.start_autonomous_mode()
                 print("🟢 Autonomous lane following STARTED")
+                car.start_autonomous_mode()
+                
 
         elif cc == 'm':
             print("You have selected manual mode.")
