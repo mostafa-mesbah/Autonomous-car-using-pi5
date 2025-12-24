@@ -149,23 +149,21 @@ def classify_turn_with_direction(angle):
         mission="f"
     elif 155>=angle >150:
         mission="f 0"
-        mission="t 50 120"
+        mission="t 120 50"
 
         direction = "left"
     elif 180>=angle >155:
         mission="f 0"
-        mission="t 70 220"
-
+        mission="t 210 50"
         direction = "sharp left"
     elif 25>angle >=20:
         mission="f 0"
-        mission="t 120 50"
+        mission="t 50 120"
 
         direction = "right"
     elif 20>angle >=0:
         mission="f 0"
-        mission="t 210 70"
-
+        mission="t 70 210"
         direction = "sharp right"
     return mission,direction,angle
 

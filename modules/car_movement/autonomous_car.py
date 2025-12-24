@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from .arduino_controller import ArduinoCarController
 from .mission import Mission
 from modules.ai_model.model import ModelControl
@@ -32,6 +33,7 @@ class AutonomousCar:
         self.main_thread_commands = queue.Queue()
         self.original_term_settings = None
         self.waiting_for_parking_response = False  # NEW: Track if waiting for parking response
+        self.traffic_override = False
 
     def execute_mission(self, given_mission):
         if self.update_mission(given_mission):
@@ -202,17 +204,17 @@ class AutonomousCar:
                 self.execute_mission(mission_input)
 
     def lane_loop(self):
-        """Only lane processing."""
         while self.autonomous_mode_lane_running:
             try:
-                if self.parking_mode_running or self.waiting_for_parking_response:
-                    time.sleep(0.1)
-                    continue
-                    
+                if self.traffic_override:
+                    time.sleep(0.05)
+                    continue   # ❗ DO NOT SEND LANE COMMANDS
+
                 frame = self.capture_frame()
                 if frame is not None:
                     mission, direction, angle = process_lane(frame)
                     self.main_thread_commands.put(mission)
+
                 time.sleep(0.05)
             except Exception as e:
                 print(f"[LANE] Error: {e}")
@@ -254,10 +256,12 @@ class AutonomousCar:
             if box_area > 5000:
                 if cls == "red_light" and conf > 0.7:  
                     print(f"[TRAFFIC] Red light detected ({conf:.2f}) - Area: {int(box_area)} - Decision: STOP")
+                    self.traffic_override = True
                     return "s"  
 
                 elif cls == "green_light" and conf > 0.7:  
                     print(f"[TRAFFIC] Green light detected ({conf:.2f}) - Area: {int(box_area)} - Decision: FORWARD")
+                    self.traffic_override = False
                     return "f"  
 
                 elif cls in ["bump_sign", "yellow_sign"] and conf > 0.7:  
