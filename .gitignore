@@ -1,39 +1,65 @@
-# Python cache / build files
+# Python & Virtual Environments
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.log
-
-# Virtual environments
+*.egg-info/
+dist/
+build/
 venv/
 .env/
 .venv/
+GraduationProjectEnv/
 
-# Model weights and large binary files
-modules/ai_model/*.pt
-modules/ai_model/*.torchscript
-modules/ai_model/*_model/
-modules/ai_model/*.bin
-modules/ai_model/*.param
-modules/ai_model/*.onnx
+# ROS2 & Colcon - General
+build/
+install/
+log/
 
-# System / editor files
+# ROS2 - Project Specific Workspaces
+colcon_ws/build/
+colcon_ws/install/
+colcon_ws/log/
+
+ros2_arch/build/
+ros2_arch/install/
+ros2_arch/log/
+
+# IDE & OS
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
-.idea/
-.vscode/
-
-# Temporary or generated files
-*.tmp
-*.bak
 *.swp
 *.swo
+*~
+*.tmp
+*.bak
 
-# Jupyter notebooks checkpoints (if any)
-.ipynb_checkpoints/
-
-# If you ever store camera frames or output logs
+# Project Specific Data & Logs
 output/
 data/
 logs/
+
+# AI Models (Large binary files)
+modules/ai_model/*_model/
+modules/ai_model/*.bin
+modules/ai_model/*.onnx
+modules/ai_model/*.torchscript
+modules/ai_model/*.pt
+modules/ai_model/*.param
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Security (Certificates & Keys)
+security/certs/
+*.pem
+*.key
+
+# Compiled Objects
+*.o
+*.obj
+*.a
+*.so
+*.exe

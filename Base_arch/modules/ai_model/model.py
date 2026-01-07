@@ -1,6 +1,5 @@
 import time
 from flask import Flask, Response
-from picamera2 import Picamera2
 import cv2
 import numpy as np
 from ultralytics import YOLO
@@ -14,14 +13,9 @@ class ModelControl:
         self.default_conf = 0.6
         self.infer_size = infer_size
         
-        # Initialize camera
-        self.picam2 = Picamera2()
-        config = self.picam2.create_preview_configuration(
-            main={"size": (width, height), "format": "RGB888"}
-        )
-        self.picam2.configure(config)
-        self.picam2.start()
-        time.sleep(1)
+        self.camera = cv2.VideoCapture(0)
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         
         # Load YOLO model
         self.model = YOLO(self.model_path)
@@ -37,7 +31,7 @@ class ModelControl:
 
     def capture(self):
         with self.lock:
-            frame = self.picam2.capture_array()
+            frame = camera.read()
             return frame
     def detect(self, frame):
         detections = [] 
