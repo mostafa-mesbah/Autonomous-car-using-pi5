@@ -1,186 +1,158 @@
 #!/usr/bin/env python3
-from .arduino_controller import ArduinoCarController
-from .mission import Mission
-from modules.ai_model.model import ModelControl
-import threading
-from ..lane_detector.lane import process_lane
-import time
-import queue
 import sys
 import termios
-import tty
+import threading
+import time
 
-class AutonomousCar:
-    def __init__(self, stall_speed=50, max_speed=255, current_speed=100, 
-                 model_path="~/graduation_project/Autonomous-car-using-pi5/modules/ai_model/best_traffic_signs.pt",
-                 port='/dev/ttyACM0', baudrate=115200):
+from ..ai_model.detector import TrafficDetector
+from ..ai_model.model import ModelControl
+from ..camera.capture import CameraCapture
+from ..camera.frame_manger import FrameManager
+from ..controller.controller import ArduinoCarController
+from ..lane_detector.lane import process_lane
+from ..missions.mission import Mission
+from ..utils.command_queue import CommandQueue
+from ..utils.input_handler import InputHandler
+from ..logger.logger import CarLogger
+
+class AutonomousCar(InputHandler, TrafficDetector):
+    def __init__(
+        self,
+        stall_speed=50,
+        max_speed=255,
+        current_speed=100,
+        model_path="/home/mostafa/old_version/Autonomous-car-using-pi5/Base_arch/fils/best_traffic_signs_openvino_model",
+        port="/dev/ttyUSB0",
+        baudrate=115200,
+    ):
+        InputHandler.__init__(self)
+        TrafficDetector.__init__(self)
+        self.logger = CarLogger()
         self.stall_speed = stall_speed
-        self.current_mission = 's'
+        self.current_mission = "s"
         self.normal_speed = 100
         self.max_speed = max_speed
         self.current_speed = current_speed
         self.model_path = model_path
+
         self.stream_thread = None
         self.autonomous_mode_thread = None
+        self.capture_thread = None
+        self.lane_thread = None
+        self.detect_thread = None
         self.stream_thread_running = False
         self.autonomous_mode_lane_running = False
         self.autonomous_mode_traffic_running = False
         self.parking_mode_running = False
+        self.waiting_for_parking_response = False
+
         self.controller = ArduinoCarController(port, baudrate)
         self.mission = Mission()
         self.model = ModelControl(self.model_path)
-        self.user_input_queue = queue.Queue()
-        self.main_thread_commands = queue.Queue()
-        self.original_term_settings = None
-        self.waiting_for_parking_response = False  # NEW: Track if waiting for parking response
-        self.traffic_override = False
+    
+        
+        self.camera = CameraCapture()
+        self.frame_manager = FrameManager(self.camera, self.logger)
+        self.command_queue = CommandQueue()
+        self.user_input_queue = self.command_queue.parking_queue
+        self.main_thread_commands = self.command_queue.mission_queue
+        self.user_command_queue = self.command_queue.user_queue
 
     def execute_mission(self, given_mission):
-        if self.update_mission(given_mission):
-            self.mission.execute(self.controller, self.current_mission)
-
-    def update_mission(self, new_mission):
-        if self.mission.update(new_mission):
-            self.current_mission = new_mission
-            return True
-        return False
+        self.current_mission = given_mission
+        self.mission.execute(self.controller, given_mission)
 
     def stop(self):
+        self.frame_manager.stop_capture()
         self.controller.stop()
-
-    def get_single_key(self, prompt=None):
-        """Get a single key press without waiting for Enter"""
-        if prompt:
-            sys.stdout.write(prompt)
-            sys.stdout.flush()
-        
-        # Set terminal to raw mode temporarily
-        old_settings = termios.tcgetattr(sys.stdin)
-        try:
-            tty.setraw(sys.stdin.fileno())
-            key = sys.stdin.read(1)
-        finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        
-        # Echo the key pressed and newline
-        sys.stdout.write(key + '\n')
-        sys.stdout.flush()
-        
-        return key
 
     def stop_all_threads(self):
         """Stop all autonomous threads"""
         print("[STOP] Stopping all threads...")
-        
+
         self.autonomous_mode_lane_running = False
         self.autonomous_mode_traffic_running = False
         self.parking_mode_running = False
-        
-        # Give threads a moment to exit
-        time.sleep(0.2)
-        
+        self.waiting_for_parking_response = False
+        self.frame_manager.stop_capture()
+        self.command_queue.clear_all()
+
+
         print("[STOP] All threads stopped")
 
-    def stream_car(self, host="0.0.0.0", port=5000):
-        if self.stream_thread is None:
-            self.stream_thread = threading.Thread(
-                target=self.model.start_stream, 
-                kwargs={"host": host, "port": port},
-                daemon=True
-            )
-            self.stream_thread.start()
-            print(f"[STREAM] Streaming started in thread on http://{host}:{port}/")
+    def get_current_frame(self, blocking=False, timeout=0.1):
+        return self.frame_manager.get_current_frame(blocking=blocking, timeout=timeout)
 
     def start_autonomous_mode(self):
-        # Reset flags
         self.autonomous_mode_lane_running = True
         self.autonomous_mode_traffic_running = True
         self.parking_mode_running = False
         self.waiting_for_parking_response = False
-        
-        # Clear queues
-        while not self.user_input_queue.empty():
-            self.user_input_queue.get()
-        while not self.main_thread_commands.empty():
-            self.main_thread_commands.get()
-        
-        # Start threads
-        self.lane_thread = threading.Thread(
-            target=self.lane_loop,
-            daemon=True
-        )
-        
-        self.detect_thread = threading.Thread(
-            target=self.detect_loop,
-            daemon=True
-        )
-        
+        self.traffic_override = False
+        self.command_queue.clear_all()
+
+        self.frame_manager.start_capture()
+
+        self.lane_thread = threading.Thread(target=self.lane_loop, daemon=True,name="LaneThread")
+        self.detect_thread = threading.Thread(target=self.detect_loop, daemon=True,name="DetectThread")
+
         self.lane_thread.start()
         self.detect_thread.start()
-        print("[AUTONOMOUS MODE] Lane + Detection threads started.")
-        
-        # Main control loop
+        print("[AUTONOMOUS MODE] Capture + Lane + Detection threads started.")
+        self.execute_mission("f 150")
+        # Track last loop time for delay calculation
+        last_time = time.perf_counter()
+
         try:
             while self.autonomous_mode_traffic_running:
-                # Check for parking requests
+                # Calculate delay
+                current_time = time.perf_counter()
+                delay_ms = (current_time - last_time) * 1000
+                
+                # Log only the delay
+                self.logger.update("cmd_delay_ms", round(delay_ms, 1))
+                
                 if not self.waiting_for_parking_response:
-                    try:
-                        if self.user_input_queue.qsize() > 0:
-                            request = self.user_input_queue.get_nowait()
-                            if request == "parking_request":
-                                # Stop all threads and car
-                                self.stop_all_threads()
-                                self.execute_mission("s")
-                                self.waiting_for_parking_response = True
-                                
-                                # Ask for parking confirmation
-                                print("\n" + "="*50)
-                                print("PARKING AREA DETECTED!")
-                                print("Do you want to park? (y/n): ", end="")
-                                sys.stdout.flush()
-                                
-                                # Get single key without Enter
-                                response = self.get_single_key()
-                                
-                                if response == 'y':
-                                    print("[PARKING] Executing parking command...")
-                                    # Just send the park command and stay stopped
-                                    self.execute_mission("park")
-                                    print("[PARKING] Parking command sent. System remains stopped.")
-                                else:
-                                    print("[PARKING] Skipping parking area.")
-                                
-                                # Reset flag but don't restart threads
-                                self.waiting_for_parking_response = False
-                                print("[INFO] System is stopped. Press Enter to restart autonomous mode or type commands manually.")
-                                # System stays stopped - user needs to manually restart
-                                return  # Exit autonomous mode
-                    except queue.Empty:
-                        pass
+                    request = self.command_queue.get_parking_request()
+                    if request == "parking_request":
+                        self.stop_all_threads()
+                        self.execute_mission("s")
+                        self.waiting_for_parking_response = True
+
+                        print("\n" + "=" * 50)
+                        print("PARKING AREA DETECTED!")
+                        print("Do you want to park? (y/n): ", end="")
+                        sys.stdout.flush()
+
+                        response = self.get_single_key()
+
+                        if response == "y":
+                            print("[PARKING] Executing parking command...")
+                            self.execute_mission("park")
+                            print("[PARKING] Parking command sent. System remains stopped.")
+                        else:
+                            print("[PARKING] Skipping parking area.")
+
+                        self.waiting_for_parking_response = False
+                        print("[INFO] System is stopped. Press Enter to restart autonomous mode or type commands manually.")
+                        return
                 
-                # Execute mission commands from detection thread
-                try:
-                    mission_cmd = self.main_thread_commands.get(timeout=0.1)
+                mission_cmd = self.command_queue.get_mission_command()
+                if mission_cmd:
                     self.execute_mission(mission_cmd)
-                except queue.Empty:
-                    pass
+
+                cc = self.get_user_command_non_blocking()
+                if cc == "s":
+                    self.stop_autonomous_mode()
+                    break
+                if cc:
+                    self.execute_mission(cc)
                 
-                # Check for user input (non-blocking with select)
-                import select
-                if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                    cc = sys.stdin.readline().strip().lower()
-                    if cc == 's':
-                        self.stop_autonomous_mode()
-                        break
-                    elif cc:
-                        self.execute_mission(cc)
-                        
+                # Update last time for next delay calculation
+                last_time = current_time
+
         except KeyboardInterrupt:
             self.stop_autonomous_mode()
-        finally:
-            # Clean up terminal if needed
-            if self.original_term_settings:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.original_term_settings)
 
     def stop_autonomous_mode(self):
         """Stop autonomous mode gracefully"""
@@ -188,88 +160,94 @@ class AutonomousCar:
         self.stop_all_threads()
         self.execute_mission("s")
 
-    def capture_frame(self):
-        return self.model.capture()
-
     def start_manual_mode(self):
         while True:
             mission_input = input("Enter command: ").strip()
             print(f"You entered: {mission_input}")
-            
-            if mission_input.lower() == 'stop':
+
+            if mission_input.lower() == "stop":
                 print("Goodbye!")
                 self.stop()
                 break
-            else:
-                self.execute_mission(mission_input)
 
+            self.execute_mission(mission_input)
+
+    
     def lane_loop(self):
+        last_time = time.perf_counter()  # Track last iteration time
+        
         while self.autonomous_mode_lane_running:
             try:
-                if self.traffic_override:
-                    time.sleep(0.05)
-                    continue   # ❗ DO NOT SEND LANE COMMANDS
+                # Calculate delay since last loop iteration
+                current_time = time.perf_counter()
+                delay_ms = (current_time - last_time) * 1000
+                
+                # Log the delay (once per loop)
+                self.logger.update("lane_delay_ms", round(delay_ms, 1))
+                
+                if self.should_override_lane():
+                    last_time = current_time  # Update time even when skipping
+                    continue
 
-                frame = self.capture_frame()
+                frame = self.get_current_frame()
                 if frame is not None:
-                    mission, direction, angle = process_lane(frame)
+                    mission, direction, angle, debug_info = process_lane(frame)
                     self.main_thread_commands.put(mission)
 
-                time.sleep(0.05)
+                # Update last time for next delay calculation
+                last_time = current_time
+
             except Exception as e:
                 print(f"[LANE] Error: {e}")
-                time.sleep(0.1)
-
     def detect_loop(self):
-        """Capture + detection + mission logic."""
+        last_time = time.perf_counter()
+
         while self.autonomous_mode_traffic_running:
+            current_time = time.perf_counter()
+            delay_ms = (current_time - last_time) * 1000
+            self.logger.update("detect_delay_ms", round(delay_ms, 1))
+            
             try:
                 if self.parking_mode_running or self.waiting_for_parking_response:
-                    time.sleep(0.1)
+                    last_time = current_time
                     continue
-                    
-                frame = self.capture_frame()
+
+                frame = self.get_current_frame()
                 if frame is not None:
                     detections = self.model.detect(frame)
-                    traffic_decision = self.check_traffic(detections)
-                    
+                    traffic_decision, detection_type = self.check_traffic(detections)
+
                     if traffic_decision:
-                        if traffic_decision == "park" and not self.waiting_for_parking_response:
-                            # Request parking decision
+                        # Handle red light - DEACTIVATE lane loop
+                        if detection_type == "red_light" or (detection_type == "red_light_active" and self.is_red_light_active()):
+                            if self.autonomous_mode_lane_running:
+                                print("[TRAFFIC] 🛑 Red light - DEACTIVATING lane detection")
+                                self.autonomous_mode_lane_running = False
+                            self.main_thread_commands.put("s")  # Stop command
+                        
+                        # Handle green light - REACTIVATE lane loop
+                        elif detection_type == "green_light":
+                            if not self.autonomous_mode_lane_running:
+                                print("[TRAFFIC] 🟢 Green light - REACTIVATING lane detection")
+                                self.autonomous_mode_lane_running = True
+                                # Create NEW thread instead of restarting old one
+                                self.lane_thread = threading.Thread(target=self.lane_loop, daemon=True,name="LaneThread")
+                                self.lane_thread.start()
+                            self.main_thread_commands.put("f")  # Forward command
+                        
+                        # Handle parking
+                        elif traffic_decision == "park" and not self.waiting_for_parking_response:
                             self.user_input_queue.put("parking_request")
-                        elif traffic_decision != "park":
+                        
+                        # Handle other traffic signs
+                        elif traffic_decision not in ["s", "f"]:  # speed limits, bumps, etc.
                             self.main_thread_commands.put(traffic_decision)
-                            
-                time.sleep(0.1)
+                
+                last_time = current_time
+                
             except Exception as e:
                 print(f"[DETECT] Error: {e}")
-                time.sleep(0.1)
+                import traceback
+                traceback.print_exc()
 
-    def check_traffic(self, detections):  
-        if not detections:  
-            return None  
-        
-        # Process detections with priority (highest confidence first)  
-        for cls, conf, verts, box_area in sorted(detections, key=lambda x: x[1], reverse=True):  
-            cls = cls.lower()  
-
-            if box_area > 5000:
-                if cls == "red_light" and conf > 0.7:  
-                    print(f"[TRAFFIC] Red light detected ({conf:.2f}) - Area: {int(box_area)} - Decision: STOP")
-                    self.traffic_override = True
-                    return "s"  
-
-                elif cls == "green_light" and conf > 0.7:  
-                    print(f"[TRAFFIC] Green light detected ({conf:.2f}) - Area: {int(box_area)} - Decision: FORWARD")
-                    self.traffic_override = False
-                    return "f"  
-
-                elif cls in ["bump_sign", "yellow_sign"] and conf > 0.7:  
-                    print(f"[TRAFFIC] {cls} detected ({conf:.2f}) - Area: {int(box_area)} - Decision: SLOW DOWN")  
-                    return "speed=50"  
-                
-                elif cls == "parking_area" and conf > 0.7:  
-                    print(f"[TRAFFIC] Parking area detected ({conf:.2f}) - Area: {int(box_area)}")
-                    return "park"
-                
         return None

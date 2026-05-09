@@ -226,9 +226,7 @@ def main():
             
             print("-" * 40)
             
-            # Wait before next reading
-            time.sleep(DELAY_SECONDS)
-            
+            # Wait before next reading            
     except KeyboardInterrupt:
         print("\n\nTemperature monitoring and command polling stopped by user")
         print("Goodbye!")

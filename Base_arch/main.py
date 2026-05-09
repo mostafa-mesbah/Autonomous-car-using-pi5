@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-from modules.car_movement.autonomous_car import AutonomousCar
-from modules.lane_detector.lane import process_lane
-import threading
-import time
 import os
 import sys
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
+
+from modules.car_movement import AutonomousCar
+
+
 def main():
-    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              "modules", "ai_model", "best_traffic_signs.pt")
-    car = AutonomousCar(50, 255, 100, model_path)
+
+    car = AutonomousCar(50, 255, 100)
     #car.stream_car()
 
     while True:

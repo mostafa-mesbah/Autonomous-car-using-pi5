@@ -31,7 +31,7 @@ def dynamic_binary(img_bgr, use_percentile=True, pct_low=0.5, pct_high=99.5):
     _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
     return gray, binary, threshold
 
-def preprocess_image(frame, resize_dim=(640, 480), crop_y=380, a_shift=-10):
+def preprocess_image(frame, resize_dim=(640, 480), crop_y=260, a_shift=-10):
     """
     Read, resize, crop, and optionally remove red from the image.
     """
@@ -41,7 +41,7 @@ def preprocess_image(frame, resize_dim=(640, 480), crop_y=380, a_shift=-10):
         raise FileNotFoundError(f"Image not found: {image_path}")
     frame = cv2.resize(frame, resize_dim)
     frame_cropped = frame[crop_y:, :]
-    cv2.imwrite("croped_frame.jpg",frame_cropped)
+    #cv2.imwrite("croped_frame.jpg",frame_cropped)
     frame_cropped = remove_red_lab(frame_cropped, a_shift)
     return frame_resized, frame_cropped
 
@@ -145,26 +145,20 @@ def classify_turn_with_direction(angle):
     
     if 150 >=angle >= 25:
         direction = "straign"
-        mission="f 0"
         mission="f"
     elif 155>=angle >150:
-        mission="f 0"
-        mission="t 120 50"
-
+        mission="t 110"
         direction = "left"
     elif 180>=angle >155:
-        mission="f 0"
-        mission="t 210 50"
+        mission="t 115"
         direction = "sharp left"
     elif 25>angle >=20:
-        mission="f 0"
-        mission="t 50 120"
-
+        mission="t 80"
         direction = "right"
     elif 20>angle >=0:
-        mission="f 0"
-        mission="t 70 210"
+        mission="t 70"
         direction = "sharp right"
+    #print(f"Angle: {angle:.2f}°, Direction: {direction}, Mission: {mission}")
     return mission,direction,angle
 
 # ==========================
@@ -198,20 +192,49 @@ def visualize_results_cli(fliped_frame,frame_cropped,gray, binary,dilated,longes
         
 
     return vis 
-def process_lane(frame):
-    fliped_frame = cv2.flip(frame, -1)
-    #cv2.imwrite("first_frame.jpg",fliped_frame)
-    frame_resized, frame_cropped = preprocess_image(fliped_frame)
+def process_lane(frame, return_debug=False):
+    frame_resized, frame_cropped = preprocess_image(frame)
     gray, binary, threshold = dynamic_binary(frame_cropped)
     dilated = dilate_binary(binary)
     longest_line, length, all_lines = extract_longest_white_line(dilated)
-    #cv2.imwrite("last_frame.jpg",dilated)
-    #visualize_results_cli(fliped_frame,frame_cropped,gray, binary,dilated,longest_line)
+    
     if longest_line:
         angle = compute_line_angle(longest_line)
-        #print(f"Angle of the line: {angle:.2f}°")
-        return classify_turn_with_direction(angle)
+        mission, direction, angle = classify_turn_with_direction(angle)
+        
+        if return_debug:
+            # Create visualization with line drawn on dilated image
+            vis = cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)
+            cv2.line(vis, longest_line[0], longest_line[1], (0, 0, 255), 2)
+            
+            debug_info = {
+                'original': frame_resized,
+                'cropped': frame_cropped,
+                'gray': gray,
+                'binary': binary,
+                'dilated': dilated,
+                'visualization': vis,
+                'longest_line': longest_line,
+                'angle': angle
+            }
+            return mission, direction, angle, debug_info
+        
+        return mission, direction, angle, None
     else:
         print("No valid lines detected.")
-        return 's',"stop"
-
+        
+        if return_debug:
+            vis = cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)
+            debug_info = {
+                'original': frame_resized,
+                'cropped': frame_cropped,
+                'gray': gray,
+                'binary': binary,
+                'dilated': dilated,
+                'visualization': vis,
+                'longest_line': None,
+                'angle': 0
+            }
+            return 's', "stop", 0, debug_info
+        
+        return 's', "stop", 0, None

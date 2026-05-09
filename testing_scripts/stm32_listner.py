@@ -66,7 +66,6 @@ def main():
                         timestamp = time.strftime("%H:%M:%S")
                         print(f"🕒 [{timestamp}] #{message_count:03d} → {data}")
                 
-                time.sleep(0.1)  # Small delay to reduce CPU usage
                 
             except KeyboardInterrupt:
                 print(f"\n\n📊 Received {message_count} messages total")
