@@ -21,7 +21,7 @@ class AutonomousCar(InputHandler, TrafficDetector):
         stall_speed=50,
         max_speed=255,
         current_speed=100,
-        model_path="/home/mostafa/old_version/Autonomous-car-using-pi5/Base_arch/fils/best_traffic_signs_openvino_model",
+        model_path="/home/mostafa/zeft_final/Autonomous-car-using-pi5/Base_arch/fils/best_traffic_signs_openvino_model",
         port="/dev/ttyUSB0",
         baudrate=115200,
     ):
@@ -30,7 +30,7 @@ class AutonomousCar(InputHandler, TrafficDetector):
         self.logger = CarLogger()
         self.stall_speed = stall_speed
         self.current_mission = "s"
-        self.normal_speed = 100
+        self.normal_speed = 150
         self.max_speed = max_speed
         self.current_speed = current_speed
         self.model_path = model_path
@@ -99,7 +99,7 @@ class AutonomousCar(InputHandler, TrafficDetector):
         self.lane_thread.start()
         self.detect_thread.start()
         print("[AUTONOMOUS MODE] Capture + Lane + Detection threads started.")
-        self.execute_mission("f 150")
+        self.execute_mission("f 100")
         # Track last loop time for delay calculation
         last_time = time.perf_counter()
 

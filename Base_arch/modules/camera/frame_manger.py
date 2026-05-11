@@ -9,6 +9,12 @@ class FrameManager:
         self.logger = logger
         self.current_frame = None
         self.frame_lock = threading.Lock()
+
+
+
+
+
+
         self.frame_available = threading.Event()
         self.capture_thread_running = False
         self.capture_thread = None

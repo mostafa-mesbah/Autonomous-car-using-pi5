@@ -89,12 +89,12 @@ class Mission:
                 try:
                     servo_angle = int(parts[1])
 
-                    if 70 <= servo_angle <= 120:
+                    if 50 <= servo_angle <= 140:
                         self.current_mission = new_mission
                         controller.send_command(new_mission)
                         return True
                     else:
-                        print(f"[MISSION] Servo angle out of range (80-110): '{new_mission}'")
+                        print(f"[MISSION] Servo angle out of range (50-140): '{new_mission}'")
                         return False
 
                 except ValueError:

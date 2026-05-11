@@ -31,24 +31,24 @@ def dynamic_binary(img_bgr, use_percentile=True, pct_low=0.5, pct_high=99.5):
     _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
     return gray, binary, threshold
 
-def preprocess_image(frame, resize_dim=(640, 480), crop_y=260, a_shift=-10):
+def preprocess_image(frame, resize_dim=(640, 480), crop_y=290, a_shift=-10):
     """
     Read, resize, crop, and optionally remove red from the image.
     """
-    frame_resized = cv2.resize(frame,resize_dim)
+    #frame_resized = cv2.resize(frame,resize_dim)
 
     if frame is None:
         raise FileNotFoundError(f"Image not found: {image_path}")
-    frame = cv2.resize(frame, resize_dim)
+    #frame = cv2.resize(frame, resize_dim)
     frame_cropped = frame[crop_y:, :]
     #cv2.imwrite("croped_frame.jpg",frame_cropped)
     frame_cropped = remove_red_lab(frame_cropped, a_shift)
-    return frame_resized, frame_cropped
+    return frame_cropped
 
 # ==========================
 # Line Detection
 # ==========================
-def extract_longest_white_line(binary_img, min_size=30):
+def extract_longest_white_line(binary_img, min_size=20):
     """
     Finds the longest connected white line in a binary image.
     Returns endpoints, length, and all detected lines.
@@ -79,7 +79,7 @@ def extract_longest_white_line(binary_img, min_size=30):
             longest_line = ((int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1])))
     return longest_line, max_length, all_lines
 
-def dilate_binary(binary_img, kernel_size=(10, 10), iterations=3, invert=True):
+def dilate_binary(binary_img, kernel_size=(10, 10), iterations=2, invert=True):
     """
     Dilate a binary image to close gaps.
     """
@@ -129,37 +129,74 @@ def visualize_results(frame, gray, binary, binary_closed, longest_line):
 
 def classify_turn_with_direction(angle):
     """
-    Classify the turn based on angle.
-    Input:
-        angle : float (0-360°)
-    Output:
-        direction : 'left' or 'right'
-        level : 'sharp turn', 'low sharp turn', 'normal turn', 'no turn'
+    Lane-based steering for wide-angle camera
+
+    Expected:
+        Left lane  ≈ 30°
+        Right lane ≈ 150°
+
+    Steering logic:
+        angle < 30   -> steer RIGHT
+        angle > 150  -> steer LEFT
+        otherwise    -> straight
+
+    Servo:
+        70  -> max right
+        90  -> center
+        110 -> max left
     """
-    # Normalize angle to 0-360
+
     angle = angle % 360
-    mission="f 100"
-    angle_sym = angle
-    if angle > 180:
-        angle_sym = 360 - angle
-    
-    if 150 >=angle >= 25:
-        direction = "straign"
-        mission="f"
-    elif 155>=angle >150:
-        mission="t 110"
-        direction = "left"
-    elif 180>=angle >155:
-        mission="t 115"
-        direction = "sharp left"
-    elif 25>angle >=20:
-        mission="t 80"
+
+    SERVO_CENTER = 90
+    SERVO_MIN = 60    # max right
+    SERVO_MAX = 120   # max left
+    LANE_LEFT_ANGLE = 40
+    LANE_RIGHT_ANGLE = 140
+    # ---------------- STRAIGHT ----------------
+    if LANE_LEFT_ANGLE <= angle <= LANE_RIGHT_ANGLE:
+
+        steer = SERVO_CENTER
+        direction = "straight"
+
+    # ---------------- STEER RIGHT ----------------
+    # angle smaller than expected
+    # steer RIGHT
+    elif angle < LANE_LEFT_ANGLE:
+
+        # 40 -> 0
+        ratio = (LANE_LEFT_ANGLE - angle) / LANE_LEFT_ANGLE
+
+        # map:
+        # 90 -> 60  
+        steer = int(
+            SERVO_CENTER - ratio * (SERVO_CENTER - SERVO_MIN)
+        )
+
         direction = "right"
-    elif 20>angle >=0:
-        mission="t 70"
-        direction = "sharp right"
-    #print(f"Angle: {angle:.2f}°, Direction: {direction}, Mission: {mission}")
-    return mission,direction,angle
+
+    # ---------------- STEER LEFT ----------------
+    # angle larger than expected
+    # steer LEFT
+    elif angle > LANE_RIGHT_ANGLE:
+
+        # 140 -> 180
+        ratio = (angle - LANE_RIGHT_ANGLE) / (180 - LANE_RIGHT_ANGLE)
+
+        # map:
+        # 90 -> 125
+        steer = int(
+            SERVO_CENTER + ratio * (SERVO_MAX - SERVO_CENTER)
+        )
+
+        direction = "left"
+
+    # safety clamp
+    steer = max(SERVO_MIN, min(SERVO_MAX, steer))
+
+    mission = f"t {steer}"
+
+    return mission, direction, angle
 
 # ==========================
 # Main Function Example
@@ -193,7 +230,7 @@ def visualize_results_cli(fliped_frame,frame_cropped,gray, binary,dilated,longes
 
     return vis 
 def process_lane(frame, return_debug=False):
-    frame_resized, frame_cropped = preprocess_image(frame)
+    frame_cropped = preprocess_image(frame)
     gray, binary, threshold = dynamic_binary(frame_cropped)
     dilated = dilate_binary(binary)
     longest_line, length, all_lines = extract_longest_white_line(dilated)
@@ -208,7 +245,7 @@ def process_lane(frame, return_debug=False):
             cv2.line(vis, longest_line[0], longest_line[1], (0, 0, 255), 2)
             
             debug_info = {
-                'original': frame_resized,
+                'original': frame,
                 'cropped': frame_cropped,
                 'gray': gray,
                 'binary': binary,
@@ -226,7 +263,7 @@ def process_lane(frame, return_debug=False):
         if return_debug:
             vis = cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)
             debug_info = {
-                'original': frame_resized,
+                'original': frame,
                 'cropped': frame_cropped,
                 'gray': gray,
                 'binary': binary,
