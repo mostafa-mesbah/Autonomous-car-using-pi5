@@ -291,8 +291,8 @@ def process_camera(camera_id=1):
     global current_debug_info, current_mission, current_direction, current_angle, fps, camera_running
     
     cap = cv2.VideoCapture(camera_id)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
     
     if not cap.isOpened():
         print("[ERROR] Could not open camera")

@@ -28,7 +28,7 @@ class TrafficDetector:
         for cls, conf, verts, box_area in sorted(detections, key=lambda x: x[1], reverse=True):
             cls = cls.lower()
             
-            if box_area > 5000:
+            if box_area > 1400:
                 if cls == "red_light" and conf > 0.7:
                     print(f"[TRAFFIC] 🔴 RED LIGHT detected ({conf:.2f})")
                     self.red_light_active = True
@@ -48,6 +48,10 @@ class TrafficDetector:
                 elif cls == "parking_area" and conf > 0.7:
                     print(f"[TRAFFIC] Parking area detected ({conf:.2f})")
                     return "park", "parking_area"
+                
+                elif cls == "yellow_light" and conf > 0.7:
+                    print(f"[TRAFFIC] Yellow light detected ({conf:.2f})")
+                    return "speed=50", "yellow_light"
         
         # If red light was active but no detection in this frame
         if self.red_light_active:

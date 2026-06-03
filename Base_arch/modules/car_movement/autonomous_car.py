@@ -21,8 +21,8 @@ class AutonomousCar(InputHandler, TrafficDetector):
         stall_speed=50,
         max_speed=255,
         current_speed=100,
-        model_path="/home/mostafa/zeft_final/Autonomous-car-using-pi5/Base_arch/fils/best_traffic_signs_openvino_model",
-        port="/dev/ttyUSB0",
+        model_path="/home/uav/clone/Autonomous-car-using-pi5/Base_arch/fils/best_traffic_signs_openvino_model",
+        port="/dev/ttyACM0",
         baudrate=115200,
     ):
         InputHandler.__init__(self)
@@ -238,7 +238,9 @@ class AutonomousCar(InputHandler, TrafficDetector):
                         # Handle parking
                         elif traffic_decision == "park" and not self.waiting_for_parking_response:
                             self.user_input_queue.put("parking_request")
-                        
+                            
+                        elif detection_type == "yellow_light"or detection_type == "bump_sign":
+                            self.main_thread_commands.put(traffic_decision)  # speed=50 or similar for yellow light
                         # Handle other traffic signs
                         elif traffic_decision not in ["s", "f"]:  # speed limits, bumps, etc.
                             self.main_thread_commands.put(traffic_decision)

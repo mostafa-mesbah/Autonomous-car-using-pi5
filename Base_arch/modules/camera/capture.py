@@ -4,7 +4,7 @@ import threading
 class CameraCapture:
     """Handles camera initialization and frame capture only"""
     
-    def __init__(self, width=640, height=480, camera_index=None):
+    def __init__(self, width=320, height=240, camera_index=None):
         self.width = width
         self.height = height
         self.lock = threading.Lock()
