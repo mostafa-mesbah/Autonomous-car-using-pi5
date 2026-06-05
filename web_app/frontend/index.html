@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AAST — Autonomous Car · Mission Control</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+.aast-header {
+  text-align:center; margin-bottom:28px;
+}
+.aast-logo-row {
+  display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:16px;
+}
+.aast-logo-box {
+  width:52px; height:52px; border-radius:12px;
+  background:var(--aGlow); border:1px solid rgba(0,212,255,.25);
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-data); font-size:.8rem; font-weight:700; color:var(--accent);
+  letter-spacing:.05em;
+}
+.aast-name { font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--txt2); line-height:1.5 }
+.aast-project { font-size:1.35rem; font-weight:800; letter-spacing:-.01em; color:var(--txt); margin-top:4px }
+.aast-team { font-size:.72rem; color:var(--txt3); letter-spacing:.04em; line-height:2; margin-top:12px }
+.aast-team span { color:var(--txt2) }
+.multi-view-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:20px;
+}
+.multi-car-tile {
+  background:var(--bg2); border:1px solid var(--line); border-radius:var(--r2);
+  padding:16px; cursor:pointer; transition:all .2s var(--ease); text-decoration:none; color:inherit;
+  display:block;
+}
+.multi-car-tile:hover { border-color:var(--accent); background:var(--aGlow) }
+.mct-id { font-family:var(--font-data); font-size:.85rem; font-weight:700; color:var(--txt); margin-bottom:8px }
+.mct-row { display:flex; justify-content:space-between; font-size:.72rem; color:var(--txt2); margin-bottom:4px }
+.mct-val { font-family:var(--font-data); color:var(--txt) }
+.mct-status { margin-top:10px }
+</style>
+</head>
+<body>
+<div class="login-bg">
+  <div class="login-box">
+
+    <div class="aast-header">
+      <div class="aast-logo-row">
+        <div class="aast-logo-box">AAST</div>
+        <div>
+          <div class="aast-name">Arab Academy for Science &amp; Technology</div>
+          <div class="aast-project">Autonomous Car for Smart Cities</div>
+        </div>
+      </div>
+      <div class="aast-team">
+        Team: <span>Mayar Yousef</span> · <span>Mostafa Mesbah</span> · <span>Mohammad Atef</span> · <span>Yassin Wael</span>
+      </div>
+    </div>
+
+    <!-- Multi-car overview -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-label">All vehicles</div>
+      <div id="multiView" class="multi-view-grid">
+        <div style="grid-column:1/-1;text-align:center;color:var(--txt3);font-size:.8rem;padding:12px">Loading vehicles…</div>
+      </div>
+    </div>
+
+    <!-- Single-car connect -->
+    <div class="card">
+      <div class="card-label">Quick connect</div>
+      <div class="car-grid" id="carGrid">
+        <div style="grid-column:1/-1;text-align:center;color:var(--txt3);font-size:.8rem;padding:12px">Contacting server…</div>
+      </div>
+      <button class="btn btn-accent btn-block btn-lg" id="connectBtn" disabled style="margin-top:16px">
+        Connect to Dashboard
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const SERVER_URL = `http://${window.location.hostname}:5000`;
+let selectedCar = null;
+
+function renderMultiView(cars) {
+  const el = document.getElementById('multiView');
+  const ids = Object.keys(cars);
+  if (!ids.length) { el.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--txt3);font-size:.8rem;padding:12px">No vehicles found</div>'; return; }
+  el.innerHTML = ids.map(id => {
+    const c = cars[id];
+    const ok = c.connected;
+    const spd = Math.round(c.speed||0);
+    const bat = Math.round(c.battery||100);
+    const status = c.status || 'idle';
+    return `<a class="multi-car-tile" href="dashboard.html" onclick="localStorage.setItem('selectedCarId','${id}')">
+      <div class="mct-id">${id}</div>
+      <div class="mct-row"><span>Motor PWM</span><span class="mct-val">${spd}</span></div>
+      <div class="mct-row"><span>Battery</span><span class="mct-val">${bat}%</span></div>
+      <div class="mct-row"><span>Mode</span><span class="mct-val">${c.mode||'—'}</span></div>
+      <div class="mct-status"><span class="status-pill s-${status}" style="font-size:.62rem;padding:3px 10px">${status}</span></div>
+    </a>`;
+  }).join('');
+}
+
+function renderQuickSelect(cars) {
+  const grid = document.getElementById('carGrid');
+  const ids = Object.keys(cars);
+  if (!ids.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--txt3);font-size:.8rem">No vehicles found. Is the server running?</div>'; return; }
+  grid.innerHTML = ids.map(id => {
+    const c = cars[id];
+    return `<div class="car-option" onclick="selectCar('${id}',this)">
+      <div class="car-option-id">${id}</div>
+      <div class="car-option-status ${c.connected?'car-status-online':'car-status-offline'}">${c.connected?'● Online':'○ Offline'}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectCar(id, el) {
+  document.querySelectorAll('.car-option').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedCar = id;
+  document.getElementById('connectBtn').disabled = false;
+}
+
+document.getElementById('connectBtn').addEventListener('click', () => {
+  if (selectedCar) {
+    localStorage.setItem('selectedCarId', selectedCar);
+    window.location.href = 'dashboard.html';
+  }
+});
+
+async function loadCars() {
+  try {
+    const res  = await fetch(`${SERVER_URL}/api/cars`);
+    const cars = await res.json();
+    renderMultiView(cars);
+    renderQuickSelect(cars);
+  } catch(e) {
+    document.getElementById('carGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--red);font-size:.8rem;padding:8px">Cannot reach server. Start app.py first.</div>';
+  }
+}
+
+loadCars();
+setInterval(loadCars, 5000);
+</script>
+</body>
+</html>

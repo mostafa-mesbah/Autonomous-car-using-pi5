@@ -1,7 +1,7 @@
-from .mission_commands import MISSION_MAP
 
 class Mission:
-    def __init__(self, mission=None):  
+    def __init__(self, mission=None,telemetry=None):  
+        self.telemetry = telemetry
         pass
         
     def execute(self, controller, new_mission):
@@ -20,6 +20,7 @@ class Mission:
             try:
                 new_speed = int(new_mission.split("=")[1])
                 if 0 <= new_speed <= 255:
+                    self.telemetry.update("speed", new_speed)  # Update telemetry with new speed
                     self.global_speed = new_speed
                     print(f"[MISSION] Global speed set to {new_speed}")
                     return True
@@ -39,8 +40,9 @@ class Mission:
                 try:
                     speed = int(parts[1])
                     if 0 <= speed <= 255:
+                        self.telemetry.update("speed", speed)  # Update telemetry with new speed
                         self.current_mission = new_mission
-                        controller.send_command(new_mission)
+                        controller.send_command(new_mission)  # sends "f 200"
                         return True
                     else:
                         print(f"[MISSION] Invalid speed value (0-255 only): '{new_mission}'")
@@ -49,10 +51,8 @@ class Mission:
                     print(f"[MISSION] Invalid number format: '{new_mission}'")
                     return False
             elif len(parts) == 1:
-                speed = getattr(self, "global_speed", 150)
-                mission_cmd = f"f {speed}"
-                self.current_mission = mission_cmd
-                controller.send_command(mission_cmd)
+                self.current_mission = new_mission
+                controller.send_command(new_mission)  # sends "f" as-is
                 return True
             else:
                 print(f"[MISSION] Invalid forward command format. Use: 'f' or 'f 200'")
@@ -64,6 +64,7 @@ class Mission:
                 try:
                     speed = int(parts[1])
                     if 0 <= speed <= 255:
+                        self.telemetry.update("speed", speed)
                         self.current_mission = new_mission
                         controller.send_command(new_mission)
                         return True
@@ -88,7 +89,7 @@ class Mission:
             if len(parts) == 2:
                 try:
                     servo_angle = int(parts[1])
-
+                    self.telemetry.update("servo_angle", servo_angle)  # Update telemetry with new servo angle
                     if 50 <= servo_angle <= 140:
                         self.current_mission = new_mission
                         controller.send_command(new_mission)

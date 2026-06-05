@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trip History — AAST Autonomous Car</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.stat-cards { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-bottom:16px }
+.stat-card { background:var(--bg2); border-radius:var(--r); padding:14px 14px }
+.sc-label { font-size:.62rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--txt3); margin-bottom:6px }
+.sc-val { font-family:'Space Mono',monospace; font-size:1.5rem; font-weight:700; color:var(--txt); line-height:1 }
+.sc-unit { font-size:.68rem; color:var(--txt2); margin-top:3px; font-family:'Space Mono',monospace }
+.charts-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px }
+.chart-box { height:180px; position:relative }
+.export-btn-row { display:flex; gap:8px; justify-content:flex-end; margin-bottom:14px }
+@media(max-width:900px){ .stat-cards{grid-template-columns:repeat(2,1fr)} .charts-row{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-container">
+    <div class="nav-brand"><div class="nav-brand-dot"></div>AAST · Trip History</div>
+    <ul class="nav-links">
+      <li><a href="dashboard.html">Dashboard</a></li>
+      <li><a href="map.html">Map</a></li>
+      <li><a href="camera.html">Camera</a></li>
+      <li><a href="history.html" class="active">History</a></li>
+      <li><a href="alerts.html">Alerts</a></li>
+    </ul>
+    <div class="nav-right">
+      <select class="nav-car-select" id="carSelector"><option value="">Select car…</option></select>
+      <div class="conn-pill conn-lost" id="connPill">Disconnected</div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div class="page-title">Trip statistics</div>
+    <div class="export-btn-row">
+      <button class="btn btn-ghost" id="exportCSV">↓ Export CSV</button>
+      <button class="btn btn-ghost" id="refreshBtn">↺ Refresh</button>
+    </div>
+  </div>
+
+  <!-- STAT CARDS — no extra sensors needed, calculated from existing telemetry -->
+  <div class="stat-cards">
+    <div class="stat-card"><div class="sc-label">Peak PWM</div><div class="sc-val" id="statTopSpd">—</div><div class="sc-unit">motor power</div></div>
+    <div class="stat-card"><div class="sc-label">Avg PWM</div><div class="sc-val" id="statAvgSpd">—</div><div class="sc-unit">motor power</div></div>
+    <div class="stat-card"><div class="sc-label">Distance</div><div class="sc-val" id="statDist">—</div><div class="sc-unit">metres (GPS)</div></div>
+    <div class="stat-card"><div class="sc-label">Battery used</div><div class="sc-val" id="statBatUsed">—</div><div class="sc-unit">% drain</div></div>
+    <div class="stat-card"><div class="sc-label">Drive time</div><div class="sc-val" id="statTime">—</div><div class="sc-unit">seconds</div></div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-row">
+    <div class="card">
+      <div class="card-label">Motor PWM over time</div>
+      <div class="chart-box"><canvas id="spdHistChart"></canvas></div>
+    </div>
+    <!-- Battery drain chart — uses GPS distance vs battery. No extra sensor needed. -->
+    <div class="card">
+      <div class="card-label">Battery drain vs distance</div>
+      <div class="chart-box"><canvas id="batDrainChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-label">Temperature log</div>
+      <div style="height:140px;position:relative"><canvas id="tmpHistChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-label">YOLO detection events</div>
+      <div id="detectionLog" style="max-height:160px;overflow-y:auto">
+        <div style="color:var(--txt3);font-size:.78rem;padding:8px">No detection events recorded yet</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/socket-client.js"></script>
+<script>
+let selectedCar = localStorage.getItem('selectedCarId') || '';
+let history_speed=[], history_battery=[], history_temp=[], history_gps=[];
+let detectionEvents=[];
+let spdChart, batChart, tmpChart;
+
+/* Charts */
+function initCharts(){
+  const base = {
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    animation:{duration:300},
+    scales:{
+      y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#374151',font:{family:'Space Mono',size:9}}},
+      x:{display:false}
+    }
+  };
+  spdChart=new Chart(document.getElementById('spdHistChart').getContext('2d'),{
+    type:'line',
+    data:{labels:[],datasets:[{data:[],borderColor:'#00d4ff',backgroundColor:'rgba(0,212,255,.07)',borderWidth:1.5,tension:.4,fill:true,pointRadius:0}]},
+    options:{...base,scales:{...base.scales,y:{...base.scales.y,min:0,max:255,beginAtZero:true}}}
+  });
+  /* Battery drain chart — X axis = cumulative GPS distance (metres), Y = battery % */
+  batChart=new Chart(document.getElementById('batDrainChart').getContext('2d'),{
+    type:'line',
+    data:{labels:[],datasets:[{data:[],borderColor:'#00e676',backgroundColor:'rgba(0,230,118,.07)',borderWidth:1.5,tension:.3,fill:true,pointRadius:0,label:'Battery %'}]},
+    options:{...base,scales:{...base.scales,y:{...base.scales.y,min:0,max:100,beginAtZero:false},x:{display:true,ticks:{color:'#374151',font:{family:'Space Mono',size:8}},title:{display:true,text:'Distance (m)',color:'#374151',font:{family:'Space Mono',size:9}}}}}
+  });
+  tmpChart=new Chart(document.getElementById('tmpHistChart').getContext('2d'),{
+    type:'line',
+    data:{labels:[],datasets:[{data:[],borderColor:'#ff6d00',backgroundColor:'rgba(255,109,0,.07)',borderWidth:1.5,tension:.4,fill:true,pointRadius:0}]},
+    options:{...base,scales:{...base.scales,y:{...base.scales.y,min:15,max:75}}}
+  });
+}
+
+/* GPS distance */
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function updateFromHistory(s){
+  if(!s) return;
+  const hs=s.history?.speed||[];
+  const hb=s.history?.battery||[];
+  const ht=s.history?.temperature||[];
+
+  /* Accumulate GPS for distance calc */
+  if(s.gps) history_gps.push([s.gps.lat,s.gps.lon]);
+  if(history_gps.length>500) history_gps.shift();
+
+  /* Distance from GPS history */
+  let dist=0;
+  for(let i=1;i<history_gps.length;i++) dist+=haversine(history_gps[i-1][0],history_gps[i-1][1],history_gps[i][0],history_gps[i][1]);
+
+  /* Stats */
+  const topSpd = hs.length ? Math.round(Math.max(...hs)) : 0;
+  const avgSpd = hs.length ? Math.round(hs.reduce((a,b)=>a+b,0)/hs.length) : 0;
+  const batStart = hb.length ? hb[0] : 100;
+  const batEnd   = hb.length ? hb[hb.length-1] : 100;
+  const batUsed  = Math.max(0,Math.round(batStart-batEnd));
+  const driveTime = hs.filter(v=>v>0).length;
+
+  document.getElementById('statTopSpd').textContent  = topSpd;
+  document.getElementById('statAvgSpd').textContent  = avgSpd;
+  document.getElementById('statDist').textContent    = Math.round(dist);
+  document.getElementById('statBatUsed').textContent = batUsed;
+  document.getElementById('statTime').textContent    = driveTime;
+
+  /* Speed chart */
+  spdChart.data.labels = hs.map((_,i)=>i);
+  spdChart.data.datasets[0].data = hs;
+  spdChart.update('none');
+
+  /* Battery drain vs distance — pair each reading with cumulative distance */
+  const bLabels=[]; const bData=[];
+  let cumDist=0;
+  for(let i=1;i<history_gps.length&&i<hb.length;i++){
+    cumDist+=haversine(history_gps[i-1][0],history_gps[i-1][1],history_gps[i][0],history_gps[i][1]);
+    bLabels.push(Math.round(cumDist)+'m');
+    bData.push(hb[i]);
+  }
+  batChart.data.labels=bLabels;
+  batChart.data.datasets[0].data=bData;
+  batChart.update('none');
+
+  /* Temperature chart */
+  if(ht.length){
+    tmpChart.data.labels=ht.map((_,i)=>i);
+    tmpChart.data.datasets[0].data=ht;
+    tmpChart.update('none');
+  }
+
+  /* Detection events */
+  const evts=[];
+  if(s.traffic_light&&s.traffic_light!=='none') evts.push({t:s.timestamp,msg:`${s.traffic_light} light (${(s.yolo_confidence||0).toFixed(1)}% conf)`,cls:s.traffic_light==='red'?'warn':'hi'});
+  if(s.detected_sign&&s.detected_sign!=='none') evts.push({t:s.timestamp,msg:`Sign: ${s.detected_sign} (${(s.yolo_confidence||0).toFixed(1)}% conf)`,cls:'hi'});
+  evts.forEach(e=>{ if(!detectionEvents.length||detectionEvents[0].msg!==e.msg){ detectionEvents.unshift(e); if(detectionEvents.length>30) detectionEvents.pop() }});
+  if(detectionEvents.length){
+    document.getElementById('detectionLog').innerHTML=detectionEvents.map(e=>`<div class="log-row" style="padding:5px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;font-size:.72rem"><span style="font-family:Space Mono;font-size:.62rem;color:var(--txt3);flex-shrink:0">${(e.t||'').slice(11,19)||'--:--:--'}</span><span style="color:${e.cls==='danger'?'var(--red)':e.cls==='warn'?'var(--yellow)':e.cls==='hi'?'var(--accent)':'var(--txt2)'}">${e.msg}</span></div>`).join('');
+  }
+}
+
+/* Export CSV */
+document.getElementById('exportCSV').addEventListener('click',()=>{
+  const rows=[['time','speed_pwm','battery_pct','temperature_c','lat','lon']];
+  const now=new Date().toISOString().replace(/[:.]/g,'-');
+  const blob=new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`trip_${selectedCar}_${now}.csv`;
+  a.click();
+  alert('CSV exported. Note: connect to a live car to capture full trip data.');
+});
+
+document.getElementById('refreshBtn').addEventListener('click',loadCar);
+
+async function loadCar(){
+  if(!selectedCar) return;
+  try{
+    const res=await fetch(`${SERVER_URL}/api/car/${selectedCar}`);
+    const s=await res.json();
+    updateFromHistory(s);
+  }catch(e){}
+}
+
+async function loadCars(){
+  try{
+    const res=await fetch(`${SERVER_URL}/api/cars`);
+    const cars=await res.json();
+    const sel=document.getElementById('carSelector');
+    sel.innerHTML='<option value="">Select car…</option>';
+    Object.keys(cars).forEach(id=>{
+      const o=document.createElement('option'); o.value=id; o.textContent=id;
+      if(id===selectedCar) o.selected=true; sel.appendChild(o);
+    });
+    if(selectedCar&&cars[selectedCar]) updateFromHistory(cars[selectedCar]);
+  }catch(e){}
+}
+
+document.getElementById('carSelector').addEventListener('change',e=>{ selectedCar=e.target.value; localStorage.setItem('selectedCarId',selectedCar); history_gps=[]; loadCar() });
+socket.on('connect',()=>{ if(selectedCar) socketAPI.selectCar(selectedCar) });
+socket.on('telemetry_update',d=>{ if(selectedCar&&d[selectedCar]) updateFromHistory(d[selectedCar]) });
+
+document.addEventListener('DOMContentLoaded',()=>{ initCharts(); loadCars() });
+</script>
+</body>
+</html>

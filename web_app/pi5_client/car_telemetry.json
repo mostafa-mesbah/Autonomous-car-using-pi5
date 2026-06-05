@@ -1,0 +1,21 @@
+{
+  "car_id": "CAR_001",
+  "speed": 100,
+  "battery": 99.7,
+  "temperature": 38.9,
+  "gps": {
+    "lat": 30.045934,
+    "lon": 31.23888
+  },
+  "crash": false,
+  "mode": "auto",
+  "traffic_light": "none",
+  "detected_sign": "none",
+  "pedestrian": false,
+  "yolo_confidence": 71.9,
+  "traffic_override": false,
+  "mission": "speed=50",
+  "servo_angle": 119,
+  "timestamp": "2026-06-06T00:27:03",
+  "steering": 119
+}

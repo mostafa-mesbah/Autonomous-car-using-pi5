@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart City Map — AAST</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#07090e;--s1:#0c0f1a;--s2:#111827;--s3:#1a2236;--br:rgba(255,255,255,.07);--br2:rgba(255,255,255,.12);--t1:#e2e8f5;--t2:#64748b;--t3:#2d3748;--cy:#22d3ee;--cyg:rgba(34,211,238,.12);--grn:#34d399;--grng:rgba(52,211,153,.12);--ylw:#fbbf24;--red:#f43f5e;--redg:rgba(244,63,94,.12);--r:12px;--rL:18px;--fi:'Outfit',sans-serif;--fm:'JetBrains Mono',monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--fi);background:var(--bg);color:var(--t1);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+.nav{height:58px;flex-shrink:0;display:flex;align-items:center;background:rgba(7,9,14,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--br);padding:0 28px;gap:0;z-index:200}
+.nav-brand{display:flex;align-items:center;gap:10px;font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t1);margin-right:32px;white-space:nowrap}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--cy);box-shadow:0 0 10px var(--cy);animation:ldot 2.5s ease-in-out infinite;flex-shrink:0}
+@keyframes ldot{0%,100%{opacity:1;box-shadow:0 0 8px var(--cy)}50%{opacity:.3;box-shadow:0 0 2px var(--cy)}}
+.nav-links{display:flex;gap:2px;list-style:none;flex:1}
+.nav-links a{display:block;padding:7px 14px;font-size:.78rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--t2);text-decoration:none;border-radius:8px;transition:color .15s,background .15s}
+.nav-links a:hover{color:var(--t1);background:var(--s2)}
+.nav-links a.active{color:var(--cy);background:var(--cyg)}
+.nav-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+.conn-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border:1px solid}
+.conn-pill::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.ok{background:var(--grng);color:var(--grn);border-color:rgba(52,211,153,.25)}
+.ok::before{background:var(--grn);animation:ldot 1.8s infinite}
+.bad{background:var(--redg);color:var(--red);border-color:rgba(244,63,94,.3)}
+.bad::before{background:var(--red)}
+.car-sel{background:var(--s2);color:var(--t1);border:1px solid var(--br2);border-radius:8px;padding:5px 10px;font-family:var(--fi);font-size:.78rem;cursor:pointer}
+.car-sel:focus{outline:none;border-color:var(--cy)}
+
+/* MAP LAYOUT — full height below nav */
+.map-wrap{flex:1;display:grid;grid-template-columns:1fr 280px;gap:0;overflow:hidden;position:relative;min-height:0}
+.map-panel{width:280px;height:100%;overflow-y:auto;background:var(--s1);border-left:1px solid var(--br);padding:16px;display:flex;flex-direction:column;gap:14px;scrollbar-width:thin;scrollbar-color:var(--s3) transparent;flex-shrink:0}
+
+/* Cards inside panel */
+.pcard{background:var(--s2);border:1px solid var(--br);border-radius:var(--r);padding:14px}
+.pcard-label{font-size:.6rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--t3);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.pcard-label::before{content:'';width:10px;height:1px;background:var(--t3)}
+
+/* Live telemetry rows */
+.trow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--br);font-size:.76rem}
+.trow:last-child{border-bottom:none}
+.tval{font-family:var(--fm);font-size:.74rem;color:var(--t1)}
+
+/* Legend */
+.leg-item{display:flex;align-items:center;gap:8px;font-size:.73rem;color:var(--t2);padding:4px 0;border-bottom:1px solid var(--br)}
+.leg-item:last-child{border-bottom:none}
+.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.leg-line{width:20px;height:2px;flex-shrink:0}
+
+/* Status pill inline */
+.spill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid}
+.spill::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.si{background:rgba(100,116,139,.1);color:var(--t2);border-color:rgba(100,116,139,.2)}.si::before{background:var(--t2)}
+.sd{background:var(--grng);color:var(--grn);border-color:rgba(52,211,153,.25)}.sd::before{background:var(--grn);animation:ldot 1.8s infinite}
+.ss{background:rgba(251,191,36,.12);color:var(--ylw);border-color:rgba(251,191,36,.3)}.ss::before{background:var(--ylw)}
+.sa{background:var(--redg);color:var(--red);border-color:rgba(244,63,94,.35)}.sa::before{background:var(--red)}
+
+/* Buttons in panel */
+.pbtn{width:100%;padding:8px;border-radius:8px;border:1px solid var(--br2);background:transparent;color:var(--t2);font-family:var(--fi);font-size:.74rem;cursor:pointer;margin-top:6px;transition:all .2s}
+.pbtn:hover{background:var(--s3);color:var(--t1)}
+.pbtn-cy{border-color:rgba(34,211,238,.3);color:var(--cy)}
+.pbtn-cy:hover{background:var(--cyg)}
+
+/* Map controls floating overlay */
+.map-controls{position:absolute;top:14px;left:14px;z-index:1000;display:flex;flex-direction:column;gap:6px;pointer-events:all}
+.mc-btn{background:rgba(7,9,14,.88);border:1px solid var(--br2);border-radius:8px;padding:6px 12px;font-family:var(--fi);font-size:.72rem;color:var(--t2);cursor:pointer;backdrop-filter:blur(8px);transition:all .2s;white-space:nowrap}
+.mc-btn:hover{color:var(--cy);border-color:rgba(34,211,238,.3)}
+
+/* Leaflet dark theme overrides */
+.leaflet-tile-pane{filter:brightness(.85) saturate(.9)}
+.leaflet-popup-content-wrapper{background:var(--s2)!important;border:1px solid var(--br2)!important;color:var(--t1)!important;border-radius:var(--r)!important;box-shadow:0 8px 32px rgba(0,0,0,.6)!important;font-family:var(--fi)!important;font-size:.8rem!important}
+.leaflet-popup-tip{background:var(--s2)!important}
+.leaflet-popup-close-button{color:var(--t2)!important}
+.leaflet-control-zoom a{background:rgba(7,9,14,.9)!important;color:var(--t1)!important;border-color:var(--br2)!important}
+.leaflet-control-zoom a:hover{background:var(--s2)!important;color:var(--cy)!important}
+
+@media(max-width:900px){.map-wrap{grid-template-columns:1fr}.map-panel{display:none}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-brand"><div class="live-dot"></div>AAST · Smart City Map</div>
+  <ul class="nav-links">
+    <li><a href="dashboard.html">Dashboard</a></li>
+    <li><a href="map.html" class="active">Map</a></li>
+    <li><a href="camera.html">Camera</a></li>
+    <li><a href="history.html">History</a></li>
+    <li><a href="alerts.html">Alerts</a></li>
+  </ul>
+  <div class="nav-right">
+    <select class="car-sel" id="carSel"><option value="">Select car…</option></select>
+    <div class="conn-pill bad" id="connPill">Disconnected</div>
+  </div>
+</nav>
+
+<div class="map-wrap">
+  <div style="position:relative;flex:1;height:100%;min-height:0;z-index:1">
+    <div id="map" style="position:absolute;inset:0;width:100%;height:100%;z-index:1"></div>
+    <div class="map-controls" style="position:absolute;top:14px;left:14px;z-index:1000">
+      <button class="mc-btn" id="btnCenter">⊕ Centre on car</button>
+      <button class="mc-btn" id="btnClearPath">✕ Clear path</button>
+      <button class="mc-btn" id="btnToggleInfra">⚡ Toggle infrastructure</button>
+      <button class="mc-btn" id="btnRealTL" title="Load real traffic signal positions from OpenStreetMap">🚦 Real traffic lights</button>
+    </div>
+  </div>
+
+  <aside class="map-panel">
+
+    <div class="pcard">
+      <div class="pcard-label">Live telemetry</div>
+      <div class="trow"><span style="color:var(--t2)">Motor PWM</span><span class="tval" id="pSpd">—</span></div>
+      <div class="trow"><span style="color:var(--t2)">Battery</span><span class="tval" id="pBat">—%</span></div>
+      <div class="trow"><span style="color:var(--t2)">Temperature</span><span class="tval" id="pTmp">—°C</span></div>
+      <div class="trow"><span style="color:var(--t2)">Status</span><span id="pStatus" class="spill si">Idle</span></div>
+      <div class="trow"><span style="color:var(--t2)">Detection</span><span class="tval" id="pDet" style="color:var(--cy);font-size:.68rem">—</span></div>
+    </div>
+
+    <div class="pcard">
+      <div class="pcard-label">Set destination</div>
+      <p style="font-size:.72rem;color:var(--t2);line-height:1.7;margin-bottom:8px">Click anywhere on the map to send the car to that location.</p>
+      <button class="pbtn" id="btnClearDest">Clear destination marker</button>
+    </div>
+
+    <div class="pcard">
+      <div class="pcard-label">Smart city infrastructure</div>
+      <p style="font-size:.72rem;color:var(--t2);line-height:1.7;margin-bottom:10px">Traffic lights and road signs placed around the Arab Academy for Science &amp; Technology campus in Sheraton, Cairo. Active traffic light updates when your YOLO model detects a signal.</p>
+      <div style="font-size:.68rem;color:var(--t3);font-family:var(--fm)">10 traffic lights · 7 road signs</div>
+    </div>
+
+    <div class="pcard">
+      <div class="pcard-label">Map legend</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--cy);box-shadow:0 0 6px var(--cy)"></div>Your car (live)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#a855f7"></div>Destination</div>
+      <div class="leg-item"><div class="leg-line" style="background:var(--cy)"></div>Car path</div>
+      <div class="leg-item"><div style="width:10px;height:10px;border-radius:2px;background:#1a2236;border:1px solid rgba(244,63,94,.7);flex-shrink:0"></div>Red light</div>
+      <div class="leg-item"><div style="width:10px;height:10px;border-radius:2px;background:#1a2236;border:1px solid rgba(34,211,238,.7);flex-shrink:0"></div>Green light</div>
+      <div class="leg-item"><div style="width:10px;height:10px;border-radius:2px;background:#1a2236;border:1px solid rgba(251,191,36,.6);flex-shrink:0"></div>Yellow / off</div>
+      <div class="leg-item"><div style="width:10px;height:10px;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);background:#f43f5e;flex-shrink:0"></div>Stop sign</div>
+      <div class="leg-item"><div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #fb923c;flex-shrink:0"></div>Bump / caution</div>
+      <div class="leg-item"><div style="width:10px;height:10px;border-radius:50%;background:white;border:2px solid #3b82f6;flex-shrink:0"></div>Speed limit</div>
+      <div class="leg-item"><div style="width:10px;height:10px;border-radius:50%;background:white;border:2px solid #22d3ee;flex-shrink:0"></div>Parking</div>
+    </div>
+
+  </aside>
+</div>
+
+<script src="js/socket-client.js"></script>
+<script>
+const SERVER_URL=`http://${window.location.hostname}:5000`;
+let selectedCar=localStorage.getItem('selectedCarId')||'';
+let map, carMarker, destMarker, pathLine, routeLine;
+let pathCoords = [];
+let infraVisible = true;
+const infraLayers = [];
+const tlMarkers = {};
+let realTLLoaded = false;
+
+/* AAST Sheraton campus infrastructure */
+const INFRA=[
+  {type:'tl',lat:30.0980,lon:31.3240,id:'tl1'},
+  {type:'tl',lat:30.0960,lon:31.3295,id:'tl2'},
+  {type:'tl',lat:30.0940,lon:31.3260,id:'tl3'},
+  {type:'tl',lat:30.0975,lon:31.3270,id:'tl4'},
+  {type:'tl',lat:30.0950,lon:31.3230,id:'tl5'},
+  {type:'tl',lat:30.1000,lon:31.3255,id:'tl6'},
+  {type:'tl',lat:30.0930,lon:31.3290,id:'tl7'},
+  {type:'tl',lat:30.0985,lon:31.3310,id:'tl8'},
+  {type:'tl',lat:30.0920,lon:31.3245,id:'tl9'},
+  {type:'tl',lat:30.1010,lon:31.3280,id:'tl10'},
+  {type:'stop',   lat:30.0965,lon:31.3252,label:'Stop sign'},
+  {type:'bump',   lat:30.0948,lon:31.3278,label:'Speed bump'},
+  {type:'yield',  lat:30.0990,lon:31.3265,label:'Yield'},
+  {type:'speed50',lat:30.0935,lon:31.3255,label:'Speed limit 50'},
+  {type:'parking',lat:30.0972,lon:31.3300,label:'Parking area'},
+  {type:'bump',   lat:30.0955,lon:31.3235,label:'Speed bump'},
+  {type:'stop',   lat:30.1005,lon:31.3245,label:'Stop sign'},
+];
+
+function tlIcon(state){
+  const C={red:'#f43f5e',yellow:'#fbbf24',green:'#34d399'};
+  const S={red:['on','off','off'],yellow:['off','on','off'],green:['off','off','on'],off:['off','off','off']};
+  const [rs,ys,gs]=S[state]||S.off;
+  const glow=s=>s==='on'?';box-shadow:0 0 8px currentColor':'';
+  const col=(s,c)=>s==='on'?c:'#1a2236';
+  return L.divIcon({className:'',iconSize:[16,40],iconAnchor:[8,20],html:
+    `<div style="background:rgba(4,6,11,.93);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:3px 2px;display:flex;flex-direction:column;gap:2px;width:16px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${col(rs,C.red)};${rs==='on'?'box-shadow:0 0 8px rgba(244,63,94,.9)':''}"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:${col(ys,C.yellow)};${ys==='on'?'box-shadow:0 0 8px rgba(251,191,36,.9)':''}"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:${col(gs,C.green)};${gs==='on'?'box-shadow:0 0 8px rgba(52,211,153,.9)':''}"></div>
+    </div>`
+  });
+}
+function signIcon(type){
+  const s={
+    stop:   `<div style="width:20px;height:20px;background:#f43f5e;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);display:flex;align-items:center;justify-content:center"><span style="font-size:5px;font-weight:900;color:#fff;font-family:monospace">S</span></div>`,
+    bump:   `<div style="width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:18px solid #fb923c"></div>`,
+    yield:  `<div style="width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:18px solid #f59e0b"></div>`,
+    speed50:`<div style="width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #3b82f6;display:flex;align-items:center;justify-content:center"><span style="font-size:6px;font-weight:900;color:#3b82f6;font-family:monospace">50</span></div>`,
+    parking:`<div style="width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #22d3ee;display:flex;align-items:center;justify-content:center"><span style="font-size:10px;font-weight:900;color:#22d3ee;font-family:monospace">P</span></div>`,
+  };
+  return L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],html:`<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px">${s[type]||s.bump}</div>`});
+}
+
+function initMap(){
+  map=L.map('map',{zoomControl:false}).setView([30.0956,31.3264],16);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CARTO',maxZoom:19,subdomains:'abcd'}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+
+  /* Car marker */
+  const carIcon=L.divIcon({className:'',iconSize:[18,18],iconAnchor:[9,9],html:
+    `<div style="width:18px;height:18px;border-radius:50%;background:#22d3ee;border:2px solid rgba(34,211,238,.5);box-shadow:0 0 0 0 rgba(34,211,238,.4);animation:cpulse 2s ease-in-out infinite"></div>
+     <style>@keyframes cpulse{0%,100%{box-shadow:0 0 0 0 rgba(34,211,238,.5)}50%{box-shadow:0 0 0 8px rgba(34,211,238,0)}}</style>`
+  });
+  carMarker=L.marker([30.0956,31.3264],{icon:carIcon,zIndexOffset:1000}).addTo(map);
+
+  pathLine = L.polyline([], {color:'#22d3ee', weight:2.5, opacity:.7}).addTo(map);
+  routeLine = L.polyline([], {color:'#a855f7', weight:2, opacity:.6, dashArray:'8 6'}).addTo(map);
+
+  /* Infrastructure around AAST Sheraton */
+  INFRA.forEach(item=>{
+    let m;
+    if(item.type==='tl'){
+      m=L.marker([item.lat,item.lon],{icon:tlIcon('off')}).bindTooltip('Traffic light',{className:'ltt',direction:'top'}).addTo(map);
+      tlMarkers[item.id]=m;
+    } else {
+      m=L.marker([item.lat,item.lon],{icon:signIcon(item.type)}).bindTooltip(item.label||item.type,{className:'ltt',direction:'top'}).addTo(map);
+    }
+    infraLayers.push(m);
+  });
+
+  /* AAST campus outline marker */
+  const aastMarker=L.divIcon({className:'',iconSize:[120,30],iconAnchor:[60,15],html:
+    `<div style="background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.35);border-radius:6px;padding:4px 10px;font-family:Outfit,sans-serif;font-size:.62rem;font-weight:700;color:#22d3ee;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap">AAST Campus</div>`
+  });
+  L.marker([30.0956,31.3264],{icon:aastMarker,zIndexOffset:-100}).addTo(map);
+
+  map.on('click', e => {
+    if (!selectedCar) { alert('Select a car first'); return; }
+    if (!confirm(`Set destination to ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}?`)) return;
+    if (destMarker) map.removeLayer(destMarker);
+    destMarker = L.marker([e.latlng.lat, e.latlng.lng], {
+      icon: L.divIcon({className:'', iconSize:[14,14], iconAnchor:[7,7],
+        html:'<div style="width:14px;height:14px;border-radius:50%;background:#a855f7;border:2px solid rgba(168,85,247,.5);box-shadow:0 0 10px rgba(168,85,247,.6)"></div>'})
+    }).addTo(map);
+    destMarker.bindPopup('<b style="color:#a855f7;font-family:Outfit">Destination</b>').openPopup();
+    socketAPI.setDestination(selectedCar, e.latlng.lat, e.latlng.lng);
+    // Draw dashed route line from car to destination
+    const carPos = carMarker.getLatLng();
+    routeLine.setLatLngs([[carPos.lat, carPos.lng], [e.latlng.lat, e.latlng.lng]]);
+  });
+}
+
+function updateCar(s){
+  if(!s||!s.gps)return;
+  const {lat,lon}=s.gps;
+  carMarker.setLatLng([lat,lon]);
+  if(s.speed>0){pathCoords.push([lat,lon]);if(pathCoords.length>500)pathCoords.shift();pathLine.setLatLngs(pathCoords)}
+  // Update route line endpoint when car moves
+  if(destMarker && routeLine) routeLine.setLatLngs([[lat,lon], [destMarker.getLatLng().lat, destMarker.getLatLng().lng]]);
+  document.getElementById('pSpd').textContent = Math.round(s.speed||0) + ' PWM';
+  document.getElementById('pBat').textContent = Math.round(s.battery||100) + '%';
+  document.getElementById('pTmp').textContent = Math.round(s.temperature||25) + '\u00b0C';
+  const st=s.status||'idle'; const sp=document.getElementById('pStatus'); sp.className='spill '+({idle:'si',driving:'sd',stopped:'ss',alert:'sa'}[st]||'si'); sp.textContent=st;
+  const dets=[]; if(s.traffic_light&&s.traffic_light!=='none')dets.push(s.traffic_light+' light'); if(s.detected_sign&&s.detected_sign!=='none')dets.push(s.detected_sign);
+  document.getElementById('pDet').textContent=dets.join(' · ')||'—';
+  /* Light up nearest TL */
+  if(s.traffic_light&&s.traffic_light!=='none'){
+    let near=null,minD=Infinity;
+    Object.entries(tlMarkers).forEach(([id,m])=>{const d=map.distance([lat,lon],m.getLatLng());if(d<minD){minD=d;near=id}});
+    Object.values(tlMarkers).forEach(m=>m.setIcon(tlIcon('off')));
+    if(near&&tlMarkers[near])tlMarkers[near].setIcon(tlIcon(s.traffic_light));
+  } else {
+    Object.values(tlMarkers).forEach(m=>m.setIcon(tlIcon('off')));
+  }
+}
+
+/* ── Real traffic lights from OpenStreetMap Overpass API ── */
+async function loadRealTrafficLights() {
+  const btn = document.getElementById('btnRealTL');
+  btn.textContent = 'Loading…';
+  btn.style.color = 'var(--cy)';
+  // Bounding box around AAST Sheraton campus (roughly 1.5km radius)
+  const bbox = '30.085,31.315,30.105,31.335';
+  const query = `[out:json][timeout:15];node[highway=traffic_signals](${bbox});out body;`;
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: query
+    });
+    const data = await res.json();
+    let count = 0;
+    data.elements.forEach(node => {
+      const id = 'osm_' + node.id;
+      if (tlMarkers[id]) return;  // already added
+      const m = L.marker([node.lat, node.lon], {icon: tlIcon('off')})
+        .bindTooltip('Traffic signal (OSM)', {className:'ltt', direction:'top'})
+        .addTo(map);
+      tlMarkers[id] = m;
+      infraLayers.push(m);
+      count++;
+    });
+    btn.textContent = `🚦 ${count} real signals loaded`;
+    btn.style.color = 'var(--grn)';
+    realTLLoaded = true;
+  } catch(e) {
+    btn.textContent = '🚦 Load failed — retry';
+    btn.style.color = 'var(--red)';
+    setTimeout(() => { btn.textContent = '🚦 Real traffic lights'; btn.style.color = ''; }, 3000);
+  }
+}
+
+document.getElementById('btnCenter').addEventListener('click', () => {if(carMarker) map.setView(carMarker.getLatLng(), 17)});
+document.getElementById('btnClearPath').addEventListener('click', () => {pathCoords=[]; pathLine.setLatLngs([]); if(routeLine) routeLine.setLatLngs([]);});
+document.getElementById('btnToggleInfra').addEventListener('click', () => {infraVisible=!infraVisible; infraLayers.forEach(m=>infraVisible?map.addLayer(m):map.removeLayer(m));});
+document.getElementById('btnClearDest').addEventListener('click', () => {if(destMarker){map.removeLayer(destMarker);destMarker=null;} if(routeLine) routeLine.setLatLngs([]);});
+document.getElementById('btnRealTL').addEventListener('click', loadRealTrafficLights);
+
+async function loadCars(){
+  try{const res=await fetch(`${SERVER_URL}/api/cars`);const cars=await res.json();const sel=document.getElementById('carSel');sel.innerHTML='<option value="">Select car…</option>';Object.keys(cars).forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=id;if(id===selectedCar)o.selected=true;sel.appendChild(o)});if(selectedCar&&cars[selectedCar])updateCar(cars[selectedCar])}catch(e){}
+}
+document.getElementById('carSel').addEventListener('change',e=>{selectedCar=e.target.value;localStorage.setItem('selectedCarId',selectedCar);pathCoords=[];pathLine.setLatLngs([]);if(selectedCar)socketAPI.selectCar(selectedCar)});
+socket.on('connect',()=>{document.getElementById('connPill').className='conn-pill ok';document.getElementById('connPill').textContent='Connected';if(selectedCar)socketAPI.selectCar(selectedCar)});
+socket.on('disconnect',()=>{document.getElementById('connPill').className='conn-pill bad';document.getElementById('connPill').textContent='Disconnected'});
+socket.on('telemetry_update',d=>{if(selectedCar&&d[selectedCar])updateCar(d[selectedCar])});
+
+document.addEventListener('DOMContentLoaded',()=>{initMap();loadCars();setInterval(loadCars,8000)});
+</script>
+<style>
+.ltt{background:rgba(7,9,14,.92)!important;border:1px solid rgba(255,255,255,.1)!important;color:#e2e8f5!important;font-family:Outfit,sans-serif!important;font-size:.7rem!important;border-radius:6px!important;box-shadow:none!important}
+.ltt::before{display:none!important}
+</style>
+</body>
+</html>

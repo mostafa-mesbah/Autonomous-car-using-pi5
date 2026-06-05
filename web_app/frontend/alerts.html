@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alerts — AAST Autonomous Car</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<style>
+:root{--bg:#07090e;--s1:#0c0f1a;--s2:#111827;--s3:#1a2236;--br:rgba(255,255,255,.07);--br2:rgba(255,255,255,.12);--t1:#e2e8f5;--t2:#64748b;--t3:#2d3748;--cy:#22d3ee;--cyg:rgba(34,211,238,.12);--grn:#34d399;--grng:rgba(52,211,153,.12);--ylw:#fbbf24;--ylwg:rgba(251,191,36,.12);--red:#f43f5e;--redg:rgba(244,63,94,.12);--orn:#fb923c;--r:12px;--rL:18px;--fi:'Outfit',sans-serif;--fm:'JetBrains Mono',monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--fi);background:var(--bg);color:var(--t1);min-height:100vh;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background-image:radial-gradient(circle,rgba(34,211,238,.055) 1px,transparent 1px);background-size:40px 40px}
+.nav{position:sticky;top:0;z-index:100;height:58px;display:flex;align-items:center;background:rgba(7,9,14,.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--br);padding:0 28px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--cy);box-shadow:0 0 10px var(--cy);animation:ldot 2.5s ease-in-out infinite;flex-shrink:0}
+@keyframes ldot{0%,100%{opacity:1;box-shadow:0 0 8px var(--cy)}50%{opacity:.3;box-shadow:0 0 2px var(--cy)}}
+.nav-brand{display:flex;align-items:center;gap:10px;font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t1);margin-right:32px;white-space:nowrap}
+.nav-links{display:flex;gap:2px;list-style:none;flex:1}
+.nav-links a{display:block;padding:7px 14px;font-size:.78rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--t2);text-decoration:none;border-radius:8px;transition:color .15s,background .15s}
+.nav-links a:hover{color:var(--t1);background:var(--s2)}
+.nav-links a.active{color:var(--cy);background:var(--cyg)}
+.nav-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+.conn-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border:1px solid}
+.conn-pill::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.ok{background:var(--grng);color:var(--grn);border-color:rgba(52,211,153,.25)}.ok::before{background:var(--grn);animation:ldot 1.8s infinite}
+.bad{background:var(--redg);color:var(--red);border-color:rgba(244,63,94,.3)}.bad::before{background:var(--red)}
+.car-sel{background:var(--s2);color:var(--t1);border:1px solid var(--br2);border-radius:8px;padding:5px 10px;font-family:var(--fi);font-size:.78rem;cursor:pointer}
+.car-sel:focus{outline:none;border-color:var(--cy)}
+.shell{max-width:1440px;margin:0 auto;padding:22px 28px 40px;display:flex;flex-direction:column;gap:14px;position:relative;z-index:1}
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.page-title{font-size:1.1rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.btn{padding:8px 16px;border-radius:10px;border:1px solid;font-family:var(--fi);font-size:.76rem;font-weight:700;cursor:pointer;transition:all .18s}
+.btn-ghost{background:transparent;color:var(--t2);border-color:var(--br2)}.btn-ghost:hover{background:var(--s2);color:var(--t1)}
+
+/* count row */
+.counts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.cnt-card{background:var(--s2);border-radius:var(--r);padding:14px;text-align:center;border:1px solid var(--br)}
+.cnt-num{font-family:var(--fm);font-size:2rem;font-weight:700;line-height:1;margin-bottom:4px}
+.cnt-lbl{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)}
+
+/* main layout */
+.al-layout{display:grid;grid-template-columns:1fr 300px;gap:14px}
+
+/* card */
+.card{background:var(--s1);border:1px solid var(--br);border-radius:var(--rL);padding:20px;position:relative;overflow:hidden}
+.clabel{font-size:.62rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--t3);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.clabel::before{content:'';width:12px;height:1px;background:var(--t3)}
+
+/* alert items */
+.al-scroll{display:flex;flex-direction:column;gap:8px;max-height:65vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--s3) transparent}
+.al-item{padding:11px 14px;border-radius:var(--r);border:1px solid var(--br);border-left:3px solid;background:var(--s2);display:flex;align-items:flex-start;gap:10px}
+.al-item.info    {border-left-color:var(--cy)}
+.al-item.warning {border-left-color:var(--ylw);background:var(--ylwg)}
+.al-item.critical{border-left-color:var(--red);background:var(--redg)}
+.al-time{font-family:var(--fm);font-size:.62rem;color:var(--t3);flex-shrink:0;margin-top:1px}
+.al-msg{font-size:.78rem;color:var(--t2);flex:1}
+
+/* raw readings panel */
+.trow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--br);font-size:.76rem}
+.trow:last-child{border-bottom:none}
+.trow-lbl{color:var(--t2)}
+.trow-val{font-family:var(--fm);font-size:.74rem;color:var(--t1)}
+
+/* YOLO log */
+.yolo-scroll{max-height:160px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--s3) transparent;display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.ylog-row{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--br);font-size:.71rem}
+.ylog-row:last-child{border-bottom:none}
+.ylog-t{font-family:var(--fm);font-size:.62rem;color:var(--t3);flex-shrink:0}
+.ylog-m{color:var(--t2)}
+.ylog-r{color:var(--red)}.ylog-y{color:var(--ylw)}.ylog-c{color:var(--cy)}
+
+@media(max-width:900px){.al-layout{grid-template-columns:1fr}.counts{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-brand"><div class="live-dot"></div>AAST · Alerts</div>
+  <ul class="nav-links">
+    <li><a href="dashboard.html">Dashboard</a></li>
+    <li><a href="map.html">Map</a></li>
+    <li><a href="camera.html">Camera</a></li>
+    <li><a href="history.html">History</a></li>
+    <li><a href="alerts.html" class="active">Alerts</a></li>
+  </ul>
+  <div class="nav-right">
+    <select class="car-sel" id="carSel"><option value="">Select car…</option></select>
+    <div class="conn-pill bad" id="connPill">Disconnected</div>
+  </div>
+</nav>
+
+<div class="shell">
+  <div class="page-hdr">
+    <div class="page-title">Alerts</div>
+    <button class="btn btn-ghost" id="btnClear">Clear all</button>
+  </div>
+
+  <!-- Counts -->
+  <div class="counts">
+    <div class="cnt-card"><div class="cnt-num" id="cntInfo" style="color:var(--cy)">0</div><div class="cnt-lbl">Info</div></div>
+    <div class="cnt-card"><div class="cnt-num" id="cntWarn" style="color:var(--ylw)">0</div><div class="cnt-lbl">Warning</div></div>
+    <div class="cnt-card"><div class="cnt-num" id="cntCrit" style="color:var(--red)">0</div><div class="cnt-lbl">Critical</div></div>
+  </div>
+
+  <div class="al-layout">
+
+    <!-- Alert list -->
+    <div class="card">
+      <div class="clabel">Active alerts</div>
+      <div class="al-scroll" id="alertList">
+        <div style="text-align:center;color:var(--t3);font-size:.8rem;padding:24px">System nominal — no alerts</div>
+      </div>
+    </div>
+
+    <!-- Right column: raw readings + YOLO log -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Raw telemetry readings -->
+      <div class="card">
+        <div class="clabel">Raw telemetry</div>
+        <div>
+          <div class="trow"><span class="trow-lbl">Speed</span><span class="trow-val" id="sSpd">—</span></div>
+          <div class="trow"><span class="trow-lbl">Battery</span><span class="trow-val" id="sBat">—</span></div>
+          <div class="trow"><span class="trow-lbl">Temperature</span><span class="trow-val" id="sTmp">—</span></div>
+          <div class="trow"><span class="trow-lbl">GPS</span><span class="trow-val" id="sGps">—</span></div>
+          <div class="trow"><span class="trow-lbl">Servo angle</span><span class="trow-val" id="sServo">—</span></div>
+          <div class="trow"><span class="trow-lbl">Mode</span><span class="trow-val" id="sMode">—</span></div>
+          <div class="trow"><span class="trow-lbl">Traffic override</span><span class="trow-val" id="sOverride">—</span></div>
+          <div class="trow"><span class="trow-lbl">Last mission</span><span class="trow-val" id="sMission" style="color:var(--cy)">—</span></div>
+        </div>
+      </div>
+
+      <!-- YOLO detection log -->
+      <div class="card">
+        <div class="clabel">YOLO detection log</div>
+        <div class="yolo-scroll" id="yoloLog">
+          <div style="color:var(--t3);font-size:.75rem;padding:8px 0">No detections yet</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="js/socket-client.js"></script>
+<script>
+const SERVER_URL = `http://${window.location.hostname}:5000`;
+let selectedCar = localStorage.getItem('selectedCarId') || '';
+let allAlerts = [];
+const yoloEvents = [];
+
+function renderAlerts() {
+  const list = document.getElementById('alertList');
+  if (!allAlerts.length) {
+    list.innerHTML = '<div style="text-align:center;color:var(--t3);font-size:.8rem;padding:24px">System nominal — no alerts</div>';
+    document.getElementById('cntInfo').textContent = 0;
+    document.getElementById('cntWarn').textContent = 0;
+    document.getElementById('cntCrit').textContent = 0;
+    return;
+  }
+  list.innerHTML = allAlerts.slice().reverse().map(a =>
+    `<div class="al-item ${a.severity}">
+      <span class="al-time">${(a.timestamp||'').slice(11,19)||'--:--:--'}</span>
+      <span class="al-msg">${a.message}</span>
+    </div>`
+  ).join('');
+  document.getElementById('cntInfo').textContent = allAlerts.filter(a=>a.severity==='info').length;
+  document.getElementById('cntWarn').textContent = allAlerts.filter(a=>a.severity==='warning').length;
+  document.getElementById('cntCrit').textContent = allAlerts.filter(a=>a.severity==='critical').length;
+}
+
+function updatePage(s) {
+  if (!s) return;
+
+  // Raw telemetry
+  document.getElementById('sSpd').textContent     = Math.round(s.speed||0) + ' PWM';
+  document.getElementById('sBat').textContent     = Math.round(s.battery??100) + '%';
+  document.getElementById('sTmp').textContent     = Math.round(s.temperature||25) + '°C';
+  document.getElementById('sGps').textContent     = s.gps ? s.gps.lat.toFixed(5)+', '+s.gps.lon.toFixed(5) : '—';
+  document.getElementById('sServo').textContent   = s.servo_angle != null ? s.servo_angle + '°' : '—';
+  document.getElementById('sMode').textContent    = s.mode || '—';
+  document.getElementById('sOverride').textContent= s.traffic_override ? 'Active' : 'Inactive';
+  document.getElementById('sMission').textContent = s.mission || '—';
+
+  // YOLO log
+  const t = new Date().toLocaleTimeString('en-GB', {hour12:false});
+  let evt = null, cls = '';
+  if (s.traffic_light === 'red')                { evt = `Red light · ${(s.yolo_confidence||0).toFixed(1)}% conf`; cls = 'ylog-r' }
+  else if (s.traffic_light === 'green')              { evt = `Green light · ${(s.yolo_confidence||0).toFixed(1)}% conf`; cls = 'ylog-c' }
+  else if (s.traffic_light === 'yellow')             { evt = `Yellow light · ${(s.yolo_confidence||0).toFixed(1)}% conf`; cls = 'ylog-y' }
+  else if (s.detected_sign && s.detected_sign!=='none') { evt = `${s.detected_sign.replace(/_/g,' ')} · ${(s.yolo_confidence||0).toFixed(1)}% conf`; cls = 'ylog-y' }
+
+  if (evt && (!yoloEvents.length || yoloEvents[0].evt !== evt)) {
+    yoloEvents.unshift({t, evt, cls});
+    if (yoloEvents.length > 30) yoloEvents.pop();
+    document.getElementById('yoloLog').innerHTML = yoloEvents.map(e =>
+      `<div class="ylog-row"><span class="ylog-t">${e.t}</span><span class="ylog-m ${e.cls}">${e.evt}</span></div>`
+    ).join('');
+  }
+
+  // Server alerts
+  if (s.alerts && s.alerts.length) { allAlerts = s.alerts; renderAlerts() }
+}
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  if (!selectedCar) return;
+  fetch(`${SERVER_URL}/api/clear_alerts/${selectedCar}`, {method:'POST'})
+    .then(() => { allAlerts = []; renderAlerts() });
+});
+
+async function loadCars() {
+  try {
+    const res  = await fetch(`${SERVER_URL}/api/cars`);
+    const cars = await res.json();
+    const sel  = document.getElementById('carSel');
+    sel.innerHTML = '<option value="">Select car…</option>';
+    Object.keys(cars).forEach(id => {
+      const o = document.createElement('option'); o.value=id; o.textContent=id;
+      if (id===selectedCar) o.selected=true; sel.appendChild(o);
+    });
+    if (selectedCar && cars[selectedCar]) updatePage(cars[selectedCar]);
+  } catch(e) {}
+}
+
+document.getElementById('carSel').addEventListener('change', e => {
+  selectedCar = e.target.value;
+  localStorage.setItem('selectedCarId', selectedCar);
+  if (selectedCar) socketAPI.selectCar(selectedCar);
+});
+socket.on('connect', () => { if(selectedCar) socketAPI.selectCar(selectedCar) });
+socket.on('telemetry_update', d => { if(selectedCar && d[selectedCar]) updatePage(d[selectedCar]) });
+
+document.addEventListener('DOMContentLoaded', loadCars);
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "serial_port": "",
+  "serial_baudrate": 115200,
+  "camera_index": 0,
+  "camera_resolution": [320, 240],
+  "car_ids": ["CAR_001", "CAR_002", "CAR_003", "CAR_004", "CAR_005"],
+  "telemetry_interval": 1.0,
+  "history_max_length": 100
+}

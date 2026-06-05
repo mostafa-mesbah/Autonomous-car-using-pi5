@@ -1,0 +1,11 @@
+{
+    "car_id": "CAR_001",
+    "server_url": "http://68.183.216.141:5001",
+    "data_file": "/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/car_telemetry.json",
+    "sync_interval": 0.1,
+    "debug": true,
+    "starting_position": {
+        "lat": 30.0444,
+        "lon": 31.2357
+    }
+}
