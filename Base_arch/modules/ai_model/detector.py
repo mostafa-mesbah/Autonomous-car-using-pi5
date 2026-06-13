@@ -10,7 +10,7 @@ class TrafficDetector:
     }
 
     STOP_CLASS_NAMES = {
-        "person","bicycle", "car", "motorcycle",
+        "bicycle", "car", "motorcycle",
         "bus", "train", "truck", "stop sign"
     }
 

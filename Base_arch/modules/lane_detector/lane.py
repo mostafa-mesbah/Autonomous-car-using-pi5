@@ -31,9 +31,9 @@ def dynamic_binary(img_bgr, use_percentile=True, pct_low=0.5, pct_high=99.5):
 def preprocess_image(
     frame,
     resize_dim=(320, 240),
-    crop_y=165,
-    crop_left=1,
-    crop_right=1,
+    crop_y=170,
+    crop_left=20,
+    crop_right=20,
     a_shift=-10
 ):
     """
@@ -83,7 +83,7 @@ def extract_longest_white_line(binary_img, min_size=20):
             max_length = length
             longest_line = ((int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1])))
     return longest_line, max_length, all_lines
-def dilate_binary(binary_img, kernel_size=(10, 10), iterations=2, invert=True):
+def dilate_binary(binary_img, kernel_size=(1, 1), iterations=1, invert=True):
     """
     Dilate a binary image to close gaps.
     """
@@ -144,8 +144,8 @@ def classify_turn_with_direction(angle):
     """
     angle = angle % 360
     SERVO_CENTER = 94
-    SERVO_MIN = 70    # max right
-    SERVO_MAX = 120   # max left
+    SERVO_MIN = 62   # max right
+    SERVO_MAX = 125   # max left
     LANE_LEFT_ANGLE = 30
     LANE_RIGHT_ANGLE = 120
     # ---------------- STRAIGHT ----------------

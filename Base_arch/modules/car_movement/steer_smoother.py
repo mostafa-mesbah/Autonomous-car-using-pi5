@@ -1,11 +1,11 @@
 class SteeringSmoother:
-    def __init__(self, max_step=8):
+    def __init__(self, max_step=15):
         """
         max_step: maximum change per step (degrees)
         If difference > 20 degrees, send intermediate values one by one
         """
         self.max_step = max_step
-        self.last_steer = 94  # start at center
+        self.last_steer = 104  # start at center
         
     def update(self, desired_steer):
         """

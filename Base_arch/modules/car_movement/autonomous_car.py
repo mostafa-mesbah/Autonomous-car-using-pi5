@@ -193,16 +193,16 @@ class AutonomousCar(InputHandler, TrafficDetector):
                 frame = self.get_current_frame()
                 if frame is not None:
                     mission, direction, angle, debug_info = process_lane(frame)
-
+                    print(mission)
                     # Extract desired steering from mission string
                     try:
                         desired_steer = int(mission.split()[1])
                     except (IndexError, ValueError):
-                        desired_steer = 94
+                        desired_steer = 104
 
                     # Get list of steering values to send (may be 1 or many)
                     steering_values = self.steer_smoother.update(desired_steer)
-                    #print(steering_values)
+                    print(steering_values)
                     # Send ALL intermediate values to the car
                     for steer_value in steering_values:
                         smoothed_mission = f"t {steer_value}"
