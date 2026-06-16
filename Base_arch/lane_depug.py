@@ -3,268 +3,47 @@
 Simple Flask web server to visualize lane detection pipeline
 """
 
+
 import cv2
 import numpy as np
 import argparse
 import threading
 import time
 import base64
-from flask import Flask, render_template_string, Response, jsonify
+import logging           # <-- 1. Add this import
+from flask import Flask, Response, jsonify, render_template, request
 
 # Import your lane detection function
 from modules.lane_detector import process_lane
 
 app = Flask(__name__)
-
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 # Global variables
+current_left_angle = 0
+current_right_angle = 0
+
+current_left_direction = "--"
+current_right_direction = "--"
+
+current_left_mission = "--"
+current_right_mission = "--"
+current_left_length = 0
+current_right_length = 0
+
+final_angle = 0
+final_direction = "--"
+final_mission = "--"
+
 current_debug_info = None
-current_mission = "s"
-current_direction = "stop"
-current_angle = 0
 fps = 0
 camera_running = False
-
-# HTML Template (fixed - removed /info endpoint calls)
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Lane Detection Debugger</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: white;
-            margin: 0;
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #00ff88;
-        }
-        .container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            justify-content: center;
-        }
-        .pipeline {
-            flex: 2;
-            min-width: 800px;
-            background: #0f0f1a;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-        }
-        .info {
-            flex: 1;
-            min-width: 300px;
-            background: #0f0f1a;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-        }
-        .stage-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .stage-card {
-            background: #1a1a2e;
-            border-radius: 8px;
-            padding: 10px;
-            text-align: center;
-        }
-        .stage-title {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #ffaa00;
-        }
-        .stage-image {
-            width: 100%;
-            height: auto;
-            border-radius: 5px;
-            border: 1px solid #333;
-            background: #000;
-            min-height: 150px;
-        }
-        .info-card {
-            background: #1a1a2e;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        .info-label {
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 5px;
-        }
-        .info-value {
-            font-size: 28px;
-            font-weight: bold;
-            color: #00ff88;
-        }
-        .angle-value {
-            color: #ffaa00;
-            font-size: 36px;
-        }
-        .mission-value {
-            color: #00aaff;
-        }
-        .fps-value {
-            color: #ff66cc;
-        }
-        .status {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .status-running {
-            background: #00ff8822;
-            color: #00ff88;
-            border: 1px solid #00ff88;
-        }
-        hr {
-            border-color: #333;
-            margin: 15px 0;
-        }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        .live-badge {
-            animation: pulse 2s infinite;
-        }
-        .error-message {
-            color: #ff4444;
-            background: #440000;
-            padding: 10px;
-            border-radius: 5px;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <h1>🚗 Lane Detection Pipeline Debugger</h1>
-    
-    <div class="container">
-        <div class="pipeline">
-            <div style="margin-bottom: 15px;">
-                <span class="status status-running live-badge">🟢 LIVE</span>
-                <span style="float: right;">Processing FPS: <span id="fps_display">0</span></span>
-            </div>
-            
-            <div class="stage-grid">
-                <div class="stage-card">
-                    <div class="stage-title">📷 1. Original Frame</div>
-                    <img id="img_original" class="stage-image" src="data:image/jpeg;base64,...">
-                </div>
-                <div class="stage-card">
-                    <div class="stage-title">✂️ 2. Cropped ROI</div>
-                    <img id="img_cropped" class="stage-image" src="data:image/jpeg;base64,...">
-                </div>
-                <div class="stage-card">
-                    <div class="stage-title">⚫ 3. Grayscale</div>
-                    <img id="img_gray" class="stage-image" src="data:image/jpeg;base64,...">
-                </div>
-                <div class="stage-card">
-                    <div class="stage-title">🔲 4. Binary</div>
-                    <img id="img_binary" class="stage-image" src="data:image/jpeg;base64,...">
-                </div>
-                <div class="stage-card">
-                    <div class="stage-title">🔍 5. Dilated</div>
-                    <img id="img_dilated" class="stage-image" src="data:image/jpeg;base64,...">
-                </div>
-                <div class="stage-card">
-                    <div class="stage-title">🎯 6. Result (Red Line)</div>
-                    <img id="img_result" class="stage-image" src="data:image/jpeg;base64,...">
-                </div>
-            </div>
-        </div>
-        
-        <div class="info">
-            <h3>📊 Detection Results</h3>
-            
-            <div class="info-card">
-                <div class="info-label">🎯 Current Angle</div>
-                <div class="info-value angle-value" id="angle_display">0<span style="font-size: 20px;">°</span></div>
-            </div>
-            
-            <div class="info-card">
-                <div class="info-label">🧭 Direction</div>
-                <div class="info-value" id="direction_display">--</div>
-            </div>
-            
-            <div class="info-card">
-                <div class="info-label">📡 Mission Command</div>
-                <div class="info-value mission-value" id="mission_display">--</div>
-            </div>
-            
-            <div class="info-card">
-                <div class="info-label">⚡ Processing FPS</div>
-                <div class="info-value fps-value" id="fps_value">0</div>
-            </div>
-            
-            <hr>
-            
-            <div class="info-card">
-                <div class="info-label">📊 Status</div>
-                <div id="status_display" style="color: #00ff88;">Running</div>
-            </div>
-            
-            <div class="info-card">
-                <div class="info-label">⏱️ Last Update</div>
-                <div id="timestamp_display" style="color: #888;">--</div>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        function updateAll() {
-            fetch('/get_frames')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error('Error:', data.error);
-                        return;
-                    }
-                    
-                    if (data.original) {
-                        document.getElementById('img_original').src = 'data:image/jpeg;base64,' + data.original;
-                        document.getElementById('img_cropped').src = 'data:image/jpeg;base64,' + data.cropped;
-                        document.getElementById('img_gray').src = 'data:image/jpeg;base64,' + data.gray;
-                        document.getElementById('img_binary').src = 'data:image/jpeg;base64,' + data.binary;
-                        document.getElementById('img_dilated').src = 'data:image/jpeg;base64,' + data.dilated;
-                        document.getElementById('img_result').src = 'data:image/jpeg;base64,' + data.result;
-                        
-                        document.getElementById('angle_display').innerHTML = data.angle + '<span style="font-size: 20px;">°</span>';
-                        document.getElementById('direction_display').innerHTML = data.direction;
-                        document.getElementById('mission_display').innerHTML = data.mission;
-                        document.getElementById('fps_display').innerHTML = data.fps;
-                        document.getElementById('fps_value').innerHTML = data.fps;
-                        document.getElementById('timestamp_display').innerHTML = data.timestamp;
-                    }
-                })
-                .catch(error => {
-                    console.error('Fetch error:', error);
-                });
-        }
-        
-        // Update every 100ms
-        setInterval(updateAll, 100);
-        
-        // Initial update
-        updateAll();
-    </script>
-</body>
-</html>
-"""
+video_paused = False
+current_source = "camera"
+video_total_frames = 0
+video_current_frame = 0
+video_seek_target = None
+video_stream_fps = 0.0
 
 def encode_frame_to_base64(frame):
     """Convert OpenCV frame to base64 string safely"""
@@ -286,9 +65,54 @@ def encode_frame_to_base64(frame):
         print(f"[ERROR] Encoding failed: {e}")
         return None
 
+def apply_lane_result(result):
+    """Normalize lane.py return values into the global state."""
+    global current_debug_info, final_mission, final_direction, final_angle
+    global current_left_angle, current_right_angle
+    global current_left_direction, current_right_direction
+    global current_left_mission, current_right_mission
+    global current_left_length, current_right_length
+
+    if len(result) == 12:
+        (
+            mission_from_left,
+            direction_from_left,
+            angle_left,
+            left_length,
+            mission_from_right,
+            direction_from_right,
+            angle_right,
+            right_length,
+            final_mission_value,
+            final_direction_value,
+            final_angle_value,
+            debug_info,
+        ) = result
+    else:
+        raise ValueError(f"Unexpected lane result format: {len(result)}")
+
+    # Update left lane global variables
+    current_left_mission = mission_from_left
+    current_left_direction = direction_from_left
+    current_left_angle = angle_left
+    current_left_length = left_length
+
+    # Update right lane global variables
+    current_right_mission = mission_from_right
+    current_right_direction = direction_from_right
+    current_right_angle = angle_right
+    current_right_length = right_length
+
+    # Update the final decision variables
+    final_mission = final_mission_value
+    final_direction = final_direction_value
+    final_angle = final_angle_value
+    
+    current_debug_info = debug_info
+
 def process_camera(camera_id=1):
     """Background thread to process camera frames"""
-    global current_debug_info, current_mission, current_direction, current_angle, fps, camera_running
+    global fps, camera_running
     
     cap = cv2.VideoCapture(camera_id)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
@@ -313,19 +137,11 @@ def process_camera(camera_id=1):
         try:
             # Process lane detection with debug info
             result = process_lane(frame, return_debug=True)
+            apply_lane_result(result)
             
-            # Handle different return formats
-            if len(result) == 4:
-                mission, direction, angle, debug_info = result
-            else:
-                print(f"[ERROR] Unexpected return format: {len(result)}")
-                continue
-            
-            # Update global variables
-            current_mission = mission
-            current_direction = direction
-            current_angle = angle
-            current_debug_info = debug_info
+            mission = final_mission
+            direction = final_direction
+            angle = final_angle
             
             # Calculate FPS
             frame_count += 1
@@ -333,26 +149,108 @@ def process_camera(camera_id=1):
                 fps = frame_count
                 frame_count = 0
                 last_time = time.time()
-                print(f"[INFO] FPS: {fps}, Angle: {angle:.1f}°, Mission: {mission}, Direction: {direction}")
+                print(
+                    f"[INFO] FPS: {fps} | "
+                    f"Left: angle={current_left_angle:.1f} dir={current_left_direction} mission={current_left_mission} len={current_left_length:.1f} | "
+                    f"Right: angle={current_right_angle:.1f} dir={current_right_direction} mission={current_right_mission} len={current_right_length:.1f} | "
+                    f"Final: angle={final_angle:.1f} mission={final_mission} dir={final_direction}"
+                )
             
         except Exception as e:
             print(f"[ERROR] Processing error: {e}")
             import traceback
-            traceback.print_exc()
+            #traceback.print_exc()
         
         time.sleep(0.001)  # Small delay to prevent CPU overload
     
     cap.release()
     print("[INFO] Camera stopped")
 
+def process_video(video_path):
+    global fps, camera_running, video_paused
+    global video_total_frames, video_current_frame, video_seek_target, video_stream_fps
+    global current_left_angle, current_right_angle
+    global current_left_direction, current_right_direction
+    global current_left_mission, current_right_mission
+    global current_left_length, current_right_length
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        print(f"[ERROR] Cannot open {video_path}")
+        return
+
+    video_fps = cap.get(cv2.CAP_PROP_FPS)
+
+    if video_fps <= 0:
+        video_fps = 30
+
+    video_stream_fps = float(video_fps)
+    video_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    video_current_frame = 0
+    video_seek_target = None
+
+    print(f"[INFO] Video FPS = {video_fps}")
+
+    frame_count = 0
+    last_time = time.time()
+
+    while camera_running:
+
+        if video_seek_target is not None:
+            target_frame = max(0, min(int(video_seek_target), max(video_total_frames - 1, 0)))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+            video_seek_target = None
+
+        if video_paused:
+            time.sleep(0.05)
+            continue
+
+        ret, frame = cap.read()
+
+        if not ret:
+            print("[INFO] End of video")
+            break
+
+        try:
+            result = process_lane(frame, return_debug=True)
+            apply_lane_result(result)
+            video_current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES) or 0)
+
+        except Exception as e:
+            print(f"[ERROR] Processing video frame error: {e}")
+
+        frame_count += 1
+
+        if time.time() - last_time >= 1:
+            fps = frame_count
+            frame_count = 0
+            last_time = time.time()
+            print(
+                f"[INFO] FPS: {fps} | "
+                f"Left: angle={current_left_angle:.1f} dir={current_left_direction} mission={current_left_mission} len={current_left_length:.1f} | "
+                f"Right: angle={current_right_angle:.1f} dir={current_right_direction} mission={current_right_mission} len={current_right_length:.1f} | "
+                f"Final: angle={final_angle:.1f} mission={final_mission} dir={final_direction}"
+            )
+
+        # HALF SPEED playback
+        time.sleep(2.0 / video_fps)
+
+    cap.release()
+
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    return render_template("index.html")
 
 @app.route('/get_frames')
 def get_frames():
-    """Return all frames as JSON with base64 encoding"""
-    global current_debug_info, current_mission, current_direction, current_angle, fps
+    """Return all frames and stats as JSON with base64 encoding"""
+    global current_debug_info, final_mission, final_direction, final_angle, fps
+    global current_left_angle, current_right_angle
+    global current_left_direction, current_right_direction
+    global current_left_mission, current_right_mission
+    global current_left_length, current_right_length
+    global video_paused, current_source
+    global video_total_frames, video_current_frame, video_stream_fps
     
     if current_debug_info is None:
         return jsonify({
@@ -366,6 +264,26 @@ def get_frames():
             'angle': 0,
             'direction': '--',
             'mission': '--',
+            'final_angle': 0,
+            'final_direction': '--',
+            'final_mission': '--',
+            'final_steer': 0,
+            'left_angle': 0,
+            'right_angle': 0,
+            'left_direction': '--',
+            'right_direction': '--',
+            'left_mission': '--',
+            'right_mission': '--',
+            'left_length': 0,
+            'right_length': 0,
+            'left_line': None,
+            'right_line': None,
+            'frame_shape': None,
+            'video_paused': bool(video_paused),
+            'is_video_source': current_source == 'video',
+            'video_total_frames': int(video_total_frames),
+            'video_current_frame': int(video_current_frame),
+            'video_fps': float(video_stream_fps),
             'fps': 0,
             'timestamp': time.strftime('%H:%M:%S')
         })
@@ -385,6 +303,10 @@ def get_frames():
         binary_b64 = encode_frame_to_base64(current_debug_info.get('binary'))
         dilated_b64 = encode_frame_to_base64(current_debug_info.get('dilated'))
         result_b64 = encode_frame_to_base64(vis)
+        left_line = current_debug_info.get('left_line')
+        right_line = current_debug_info.get('right_line')
+        original_frame = current_debug_info.get('original')
+        frame_shape = list(original_frame.shape) if original_frame is not None else None
         
         return jsonify({
             'original': original_b64,
@@ -393,9 +315,29 @@ def get_frames():
             'binary': binary_b64,
             'dilated': dilated_b64,
             'result': result_b64,
-            'angle': float(current_angle),
-            'direction': str(current_direction),
-            'mission': str(current_mission),
+            'angle': float(final_angle),
+            'direction': str(final_direction),
+            'mission': str(final_mission),
+            'final_angle': float(final_angle),
+            'final_direction': str(final_direction),
+            'final_mission': str(final_mission),
+            'final_steer': float(final_angle),
+            'left_angle': float(current_left_angle),
+            'right_angle': float(current_right_angle),
+            'left_direction': str(current_left_direction),
+            'right_direction': str(current_right_direction),
+            'left_mission': str(current_left_mission),
+            'right_mission': str(current_right_mission),
+            'left_length': float(current_left_length),
+            'right_length': float(current_right_length),
+            'left_line': left_line,
+            'right_line': right_line,
+            'frame_shape': frame_shape,
+            'video_paused': bool(video_paused),
+            'is_video_source': current_source == 'video',
+            'video_total_frames': int(video_total_frames),
+            'video_current_frame': int(video_current_frame),
+            'video_fps': float(video_stream_fps),
             'fps': int(fps),
             'timestamp': time.strftime('%H:%M:%S')
         })
@@ -403,12 +345,51 @@ def get_frames():
         print(f"[ERROR] get_frames error: {e}")
         return jsonify({'error': str(e)})
 
+@app.route('/video/play', methods=['POST'])
+def video_play():
+    global video_paused, current_source
+    if current_source != 'video':
+        return jsonify({'ok': False, 'error': 'Video controls are only available in video source mode'})
+    video_paused = False
+    return jsonify({'ok': True, 'video_paused': video_paused})
+
+@app.route('/video/pause', methods=['POST'])
+def video_pause():
+    global video_paused, current_source
+    if current_source != 'video':
+        return jsonify({'ok': False, 'error': 'Video controls are only available in video source mode'})
+    video_paused = True
+    return jsonify({'ok': True, 'video_paused': video_paused})
+
+@app.route('/video/seek', methods=['POST'])
+def video_seek():
+    global video_seek_target, current_source, video_total_frames
+    if current_source != 'video':
+        return jsonify({'ok': False, 'error': 'Video controls are only available in video source mode'})
+
+    payload = request.get_json(silent=True) or {}
+    frame = payload.get('frame')
+    if frame is None:
+        return jsonify({'ok': False, 'error': 'Missing frame value'})
+
+    try:
+        frame = int(frame)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'Invalid frame value'})
+
+    max_frame = max(video_total_frames - 1, 0)
+    frame = max(0, min(frame, max_frame))
+    video_seek_target = frame
+    return jsonify({'ok': True, 'target_frame': frame})
+
 def main():
     parser = argparse.ArgumentParser(description='Lane Detection Web Debugger')
-    parser.add_argument('--source', type=str, choices=['camera', 'image'], default='camera',
+    parser.add_argument('--source', type=str, choices=['camera','image','video'], default='camera',
                        help='Input source')
     parser.add_argument('--image', type=str, default=None,
                        help='Path to image file')
+    parser.add_argument('--video', type=str, default=None,
+                        help='Path to mp4 file')
     parser.add_argument('--camera_id', type=int, default=0,
                        help='Camera device ID')
     parser.add_argument('--host', type=str, default='0.0.0.0',
@@ -418,7 +399,15 @@ def main():
     
     args = parser.parse_args()
     
-    global camera_running
+    global camera_running, current_source, video_paused
+    global video_total_frames, video_current_frame, video_seek_target, video_stream_fps
+
+    current_source = args.source
+    video_paused = False
+    video_total_frames = 0
+    video_current_frame = 0
+    video_seek_target = None
+    video_stream_fps = 0.0
     
     if args.source == 'camera':
         camera_running = True
@@ -427,7 +416,28 @@ def main():
         process_thread.daemon = True
         process_thread.start()
         
-        print(f"\n[INFO] Starting web server...")
+        print(f"\n[INFO] Starting web server (Camera Mode)...")
+        print(f"[INFO] Open browser and go to: http://{args.host}:{args.port}")
+        print(f"[INFO] Press Ctrl+C to stop\n")
+        
+        try:
+            app.run(host=args.host, port=args.port, debug=False, threaded=True)
+        except KeyboardInterrupt:
+            print("\n[INFO] Shutting down...")
+        finally:
+            camera_running = False
+
+    elif args.source == 'video':
+        if not args.video:
+            print("Please provide --video path when using video source")
+            return
+            
+        camera_running = True
+        process_thread = threading.Thread(target=process_video, args=(args.video,))
+        process_thread.daemon = True
+        process_thread.start()
+        
+        print(f"\n[INFO] Starting web server (Video Mode)...")
         print(f"[INFO] Open browser and go to: http://{args.host}:{args.port}")
         print(f"[INFO] Press Ctrl+C to stop\n")
         
@@ -438,7 +448,7 @@ def main():
         finally:
             camera_running = False
             
-    else:
+    elif args.source == 'image':
         # Image mode - process once
         if not args.image:
             print("Please provide --image path when using image source")
@@ -450,18 +460,11 @@ def main():
             return
         
         result = process_lane(frame, return_debug=True)
+        apply_lane_result(result)
         
-        if len(result) == 4:
-            mission, direction, angle, debug_info = result
-        else:
-            print(f"Unexpected return format")
-            return
-        
-        # Store for web display
-        current_debug_info = debug_info
-        current_mission = mission
-        current_direction = direction
-        current_angle = angle
+        mission = final_mission
+        direction = final_direction
+        angle = final_angle
         
         print(f"\n[INFO] Processing single image...")
         print(f"[INFO] Angle: {angle:.1f}°, Direction: {direction}, Mission: {mission}")

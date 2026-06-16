@@ -192,11 +192,11 @@ class AutonomousCar(InputHandler, TrafficDetector):
 
                 frame = self.get_current_frame()
                 if frame is not None:
-                    mission, direction, angle, debug_info = process_lane(frame)
-                    print(mission)
+                    result= process_lane(frame)
+                    print(result[10])
                     # Extract desired steering from mission string
                     try:
-                        desired_steer = int(mission.split()[1])
+                        desired_steer = result[10]
                     except (IndexError, ValueError):
                         desired_steer = 104
 

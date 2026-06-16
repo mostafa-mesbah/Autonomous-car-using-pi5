@@ -15,7 +15,7 @@
   "yolo_confidence": 71.9,
   "traffic_override": false,
   "mission": "speed=50",
-  "servo_angle": 115,
-  "timestamp": "2026-06-08T16:11:39",
+  "servo_angle": 103,
+  "timestamp": "2026-06-17T01:15:03",
   "steering": 119
 }

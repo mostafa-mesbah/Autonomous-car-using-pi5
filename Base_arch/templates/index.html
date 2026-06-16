@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Lane Detection Debugger</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00ff88;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .pipeline {
+            flex: 2;
+            min-width: 800px;
+            background: #0f0f1a;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        .info {
+            flex: 1;
+            min-width: 350px;
+            background: #0f0f1a;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        .stage-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stage-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        .stage-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #ffaa00;
+        }
+        .stage-image {
+            width: 100%;
+            height: auto;
+            border-radius: 5px;
+            border: 1px solid #333;
+            background: #000;
+            min-height: 150px;
+            object-fit: contain;
+        }
+        .info-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .lane-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 5px;
+            margin-bottom: 15px;
+        }
+        .lane-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #2a2a4a;
+        }
+        .lane-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            text-align: center;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .lane-title.left { color: #ff4444; }
+        .lane-title.right { color: #4488ff; }
+        
+        .lane-line {
+            margin-bottom: 8px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .lane-line span {
+            color: #00ff88;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .info-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .info-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        .angle-value { color: #ffaa00; font-size: 36px; }
+        .mission-value { color: #00aaff; }
+        .fps-value { color: #ff66cc; }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .status-running {
+            background: #00ff8822;
+            color: #00ff88;
+            border: 1px solid #00ff88;
+        }
+        hr {
+            border: none;
+            height: 1px;
+            background-color: #333;
+            margin: 15px 0;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .live-badge { animation: pulse 2s infinite; }
+        
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .video-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .seek-wrap {
+            margin-top: 12px;
+        }
+        .seek-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #9fb3d7;
+            margin-bottom: 6px;
+        }
+        .seek-slider {
+            width: 100%;
+            accent-color: #2f9bff;
+        }
+        .video-btn {
+            background: #20324f;
+            color: #fff;
+            border: 1px solid #2f4a74;
+            border-radius: 6px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .video-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚗 Lane Detection Pipeline Debugger</h1>
+    
+    <div class="container">
+        <div class="pipeline">
+            <div style="margin-bottom: 15px;">
+                <span class="status status-running live-badge">🟢 LIVE</span>
+                <span style="float: right; font-weight: bold; color: #888;">Processing FPS: <span id="fps_display" style="color: #ff66cc;">0</span></span>
+            </div>
+            
+            <div class="stage-grid">
+                <div class="stage-card">
+                    <div class="stage-title">📷 1. Original Frame</div>
+                    <img id="img_original" class="stage-image" alt="Original" src="data:image/jpeg;base64,...">
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">✂️ 2. Cropped ROI</div>
+                    <img id="img_cropped" class="stage-image" alt="Cropped" src="data:image/jpeg;base64,...">
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">⚫ 3. Grayscale</div>
+                    <img id="img_gray" class="stage-image" alt="Grayscale" src="data:image/jpeg;base64,...">
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">🔲 4. Binary</div>
+                    <img id="img_binary" class="stage-image" alt="Binary" src="data:image/jpeg;base64,...">
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">🔍 5. Dilated</div>
+                    <img id="img_dilated" class="stage-image" alt="Dilated" src="data:image/jpeg;base64,...">
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">🎯 6. Result (Overlay)</div>
+                    <img id="img_result" class="stage-image" alt="Result" src="data:image/jpeg;base64,...">
+                </div>
+            </div>
+        </div>
+        
+        <div class="info">
+            <h3 style="margin-top: 0; color: #fff; border-bottom: 2px solid #333; padding-bottom: 10px;">🛣️ Final Decision + Lanes</h3>
+
+            <div class="info-card">
+                <div class="info-label">🎯 Final Decision</div>
+                <div class="info-value mission-value" id="final_mission_display">--</div>
+                <div class="lane-line">Direction: <span id="final_direction_display">--</span></div>
+                <div class="lane-line">Steer: <span id="final_steer_display">0</span></div>
+            </div>
+            
+            <div class="lane-grid">
+                <div class="lane-card">
+                    <div class="lane-title left">Left Lane</div>
+                    <div class="lane-line">Angle: <span id="left_angle_display">0°</span></div>
+                    <div class="lane-line">Direction: <span id="left_direction_display">--</span></div>
+                    <div class="lane-line">Mission: <span id="left_mission_display">--</span></div>
+                    <div class="lane-line">Length: <span id="left_length_display">0</span></div>
+                </div>
+                
+                <div class="lane-card">
+                    <div class="lane-title right">Right Lane</div>
+                    <div class="lane-line">Angle: <span id="right_angle_display">0°</span></div>
+                    <div class="lane-line">Direction: <span id="right_direction_display">--</span></div>
+                    <div class="lane-line">Mission: <span id="right_mission_display">--</span></div>
+                    <div class="lane-line">Length: <span id="right_length_display">0</span></div>
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="info-card">
+                <div class="stats-row">
+                    <div>
+                        <div class="info-label">📊 Status</div>
+                        <div id="status_display" style="color: #00ff88; font-weight: bold;">Running</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="info-label">⏱️ Last Update</div>
+                        <div id="timestamp_display" style="color: #aaa; font-family: monospace;">--:--:--</div>
+                    </div>
+                </div>
+                <div class="video-controls">
+                    <button id="play_btn" class="video-btn" onclick="setVideoState('play')">Play</button>
+                    <button id="pause_btn" class="video-btn" onclick="setVideoState('pause')">Pause</button>
+                </div>
+                <div class="seek-wrap">
+                    <div class="seek-meta">
+                        <span id="seek_pos_display">Frame 0 / 0</span>
+                        <span id="seek_time_display">00:00 / 00:00</span>
+                    </div>
+                    <input id="seek_slider" class="seek-slider" type="range" min="0" max="0" value="0">
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-label">🧪 Debug Info</div>
+                <div class="lane-line">Left Line: <span id="left_line_display">--</span></div>
+                <div class="lane-line">Right Line: <span id="right_line_display">--</span></div>
+                <div class="lane-line">Frame Shape: <span id="frame_shape_display">--</span></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let sliderDragging = false;
+
+        function formatSeconds(totalSeconds) {
+            const sec = Math.max(0, Math.floor(totalSeconds || 0));
+            const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+            const ss = String(sec % 60).padStart(2, '0');
+            return `${mm}:${ss}`;
+        }
+
+        function setVideoState(action) {
+            const endpoint = action === 'pause' ? '/video/pause' : '/video/play';
+            fetch(endpoint, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.ok && data.error) {
+                        console.error(data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Video control error:', error);
+                });
+        }
+
+        function seekVideo(frame) {
+            fetch('/video/seek', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frame: Number(frame) })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.ok && data.error) {
+                        console.error(data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Video seek error:', error);
+                });
+        }
+
+        const seekSlider = document.getElementById('seek_slider');
+        seekSlider.addEventListener('input', () => {
+            sliderDragging = true;
+            const current = Number(seekSlider.value || 0);
+            const total = Number(seekSlider.max || 0) + 1;
+            document.getElementById('seek_pos_display').innerHTML = `Frame ${current} / ${Math.max(total - 1, 0)}`;
+        });
+        seekSlider.addEventListener('change', () => {
+            seekVideo(seekSlider.value || 0);
+            sliderDragging = false;
+        });
+
+        function updateAll() {
+            fetch('/get_frames')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Server returned an error or no frames yet:', data.error);
+                        return;
+                    }
+                    
+                    // Update Images
+                    if (data.original) document.getElementById('img_original').src = 'data:image/jpeg;base64,' + data.original;
+                    if (data.cropped) document.getElementById('img_cropped').src = 'data:image/jpeg;base64,' + data.cropped;
+                    if (data.gray) document.getElementById('img_gray').src = 'data:image/jpeg;base64,' + data.gray;
+                    if (data.binary) document.getElementById('img_binary').src = 'data:image/jpeg;base64,' + data.binary;
+                    if (data.dilated) document.getElementById('img_dilated').src = 'data:image/jpeg;base64,' + data.dilated;
+                    if (data.result) document.getElementById('img_result').src = 'data:image/jpeg;base64,' + data.result;
+                    
+                    document.getElementById('fps_display').innerHTML = data.fps || 0;
+                    document.getElementById('timestamp_display').innerHTML = data.timestamp || '--:--:--';
+                    document.getElementById('status_display').innerHTML = data.video_paused ? 'Paused' : 'Running';
+
+                    document.getElementById('final_mission_display').innerHTML = data.final_mission || data.mission || '--';
+                    document.getElementById('final_direction_display').innerHTML = data.final_direction || data.direction || '--';
+                    document.getElementById('final_steer_display').innerHTML = (data.final_steer !== null ? Number(data.final_steer).toFixed(1) : 0);
+
+                    const canControlVideo = !!data.is_video_source;
+                    document.getElementById('play_btn').disabled = !canControlVideo;
+                    document.getElementById('pause_btn').disabled = !canControlVideo;
+                    document.getElementById('seek_slider').disabled = !canControlVideo;
+
+                    const totalFrames = Number(data.video_total_frames || 0);
+                    const currentFrame = Number(data.video_current_frame || 0);
+                    const sourceFps = Number(data.video_fps || 0);
+                    const sliderMax = Math.max(totalFrames - 1, 0);
+                    document.getElementById('seek_slider').max = sliderMax;
+                    if (!sliderDragging) {
+                        document.getElementById('seek_slider').value = Math.min(currentFrame, sliderMax);
+                    }
+
+                    document.getElementById('seek_pos_display').innerHTML = `Frame ${Math.min(currentFrame, sliderMax)} / ${sliderMax}`;
+
+                    const currentSec = sourceFps > 0 ? (currentFrame / sourceFps) : 0;
+                    const totalSec = sourceFps > 0 ? (totalFrames / sourceFps) : 0;
+                    document.getElementById('seek_time_display').innerHTML = `${formatSeconds(currentSec)} / ${formatSeconds(totalSec)}`;
+
+                    // Update Left Lane Stats
+                    document.getElementById('left_angle_display').innerHTML = (data.left_angle !== null ? data.left_angle.toFixed(1) : 0) + '°';
+                    document.getElementById('left_direction_display').innerHTML = data.left_direction || '--';
+                    document.getElementById('left_mission_display').innerHTML = data.left_mission || '--';
+                    document.getElementById('left_length_display').innerHTML = (data.left_length !== null ? data.left_length.toFixed(1) : 0);
+
+                    // Update Right Lane Stats
+                    document.getElementById('right_angle_display').innerHTML = (data.right_angle !== null ? data.right_angle.toFixed(1) : 0) + '°';
+                    document.getElementById('right_direction_display').innerHTML = data.right_direction || '--';
+                    document.getElementById('right_mission_display').innerHTML = data.right_mission || '--';
+                    document.getElementById('right_length_display').innerHTML = (data.right_length !== null ? data.right_length.toFixed(1) : 0);
+
+                    // Debug Info
+                    document.getElementById('left_line_display').innerHTML = data.left_line ? JSON.stringify(data.left_line) : '--';
+                    document.getElementById('right_line_display').innerHTML = data.right_line ? JSON.stringify(data.right_line) : '--';
+                    document.getElementById('frame_shape_display').innerHTML = data.frame_shape ? data.frame_shape.join(' x ') : '--';
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                });
+        }
+        
+        // Polling interval setup (100ms = 10 FPS updates visually)
+        setInterval(updateAll, 100);
+        
+        // Initial fetch on load
+        updateAll();
+    </script>
+</body>
+</html>
