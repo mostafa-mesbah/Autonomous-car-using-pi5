@@ -27,8 +27,8 @@ def preprocess_image(
     frame,
     resize_dim=(320, 240),
     crop_y=170,
-    crop_left=20,
-    crop_right=20,
+    crop_right=25,
+    crop_left=25,
     a_shift=-10
 ):
     """
@@ -142,9 +142,9 @@ def classify_turn_with_direction(left_angle, left_length, right_angle, right_len
     """
     # ── System Constants ──────────────────────────────────────────────────────
     SERVO_CENTER = 104
-    SERVO_MIN    = 70     # Max right
-    SERVO_MAX    = 130    # Max left
-    MIN_LENGTH   = 50     # Noise threshold
+    SERVO_MIN    = 60    # Max right
+    SERVO_MAX    = 140    # Max left
+    MIN_LENGTH   = 50    # Noise threshold
 
     TARGET_LEFT  = 35
     TARGET_RIGHT = 140
@@ -153,7 +153,7 @@ def classify_turn_with_direction(left_angle, left_length, right_angle, right_len
     LANE_RIGHT_MIN, LANE_RIGHT_MAX = 140, 175
 
     global pid_integral, pid_prev_error
-    Kp, Ki, Kd = 1.5, 0.0, 0.0
+    Kp, Ki, Kd = 1.2, 0.3, 0.0
 
     # ── 1. LEFT LANE ──────────────────────────────────────────────────────────
     left_valid = (left_angle  is not None and
@@ -252,12 +252,12 @@ def process_lane(frame, return_debug=False):
     angle_left = None
     angle_right = None
 
-    if left_length < 90:
+    if left_length < 40:
         left_line = None
         angle_left = None
     else:
         angle_left = compute_line_angle(left_line)
-    if right_length < 90:
+    if right_length < 40:
         right_line = None
         angle_right = None
     else:

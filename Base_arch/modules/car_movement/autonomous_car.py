@@ -21,9 +21,9 @@ class AutonomousCar(InputHandler, TrafficDetector):
         stall_speed=50,
         max_speed=255,
         current_speed=100,
-        traffic_model_path="/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/best_traffic_signs.pt",
-        speed_model_path="/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/best_speed_limits.pt",
-        general_model_path="/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/multible_things.pt",
+        traffic_model_path="/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/best_traffic_signs_openvino_model",
+        speed_model_path="/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/best_speed_limits_openvino_model",
+        general_model_path="/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/multible_things_openvino_model",
         port="/dev/ttyACM0",
         baudrate=115200,
     ):
@@ -248,6 +248,7 @@ class AutonomousCar(InputHandler, TrafficDetector):
                         print("[TRAFFIC] 🛑 Red light - DEACTIVATING lane detection")
                         self.telemetry.update("traffic_light", "red")
                         self.autonomous_mode_lane_running = False
+                        self.main_thread_commands.put("s")
                     self.main_thread_commands.put("s")
 
                 elif traffic_type == "green_light":
@@ -280,10 +281,10 @@ class AutonomousCar(InputHandler, TrafficDetector):
                 if general_decision:
                     if general_decision == "s":
                         self.telemetry.update("detected_sign", "caution")
-                        self.red_light_active = True
                         if self.autonomous_mode_lane_running:
                             self.autonomous_mode_lane_running = False
-                    elif general_decision == "f":
+                        self.main_thread_commands.put(general_decision)
+                    elif general_decision == "f" and not self.red_light_active:
                         self.telemetry.update("detected_sign", "none")
                         self.red_light_active = False
                         if not self.autonomous_mode_lane_running:
@@ -292,7 +293,7 @@ class AutonomousCar(InputHandler, TrafficDetector):
                                 target=self.lane_loop, daemon=True, name="LaneThread"
                             )
                             self.lane_thread.start()
-                    self.main_thread_commands.put(general_decision)
+                        self.main_thread_commands.put(general_decision)
 
                 last_time = current_time
 
