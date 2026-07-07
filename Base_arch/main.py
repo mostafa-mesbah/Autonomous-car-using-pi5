@@ -13,7 +13,7 @@ def main():
     car = AutonomousCar(50, 255, 150)
     sync_client = TelemetrySyncClient(server_url="http://68.183.216.141:5001", 
                                    data_file_path="/home/uav/grad/Autonomous-car-using-pi5/Base_arch/fils/car_telemetry.json", debug=False)
-    #sync_client.start()
+    sync_client.start()
 
     while True:
         print("Good day! Welcome to the Autonomous Car Control System.")

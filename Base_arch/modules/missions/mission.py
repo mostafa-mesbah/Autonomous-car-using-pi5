@@ -2,6 +2,7 @@
 class Mission:
     def __init__(self, mission=None,telemetry=None):  
         self.telemetry = telemetry
+        self.current_speed = 0  # Default speed
         pass
         
     def execute(self, controller, new_mission):
@@ -20,6 +21,7 @@ class Mission:
             try:
                 new_speed = int(new_mission.split("=")[1])
                 if 0 <= new_speed <= 255:
+                    self.current_speed = new_speed
                     self.telemetry.update("speed", new_speed)  # Update telemetry with new speed
                     self.global_speed = new_speed
                     print(f"[MISSION] Global speed set to {new_speed}")
@@ -40,7 +42,9 @@ class Mission:
                 try:
                     speed = int(parts[1])
                     if 0 <= speed <= 255:
+                        self.current_speed = speed
                         self.telemetry.update("speed", speed)  # Update telemetry with new speed
+                        self.current_speed = speed
                         self.current_mission = new_mission
                         controller.send_command(new_mission)  # sends "f 200"
                         return True
@@ -51,6 +55,7 @@ class Mission:
                     print(f"[MISSION] Invalid number format: '{new_mission}'")
                     return False
             elif len(parts) == 1:
+                self.telemetry.update("speed", self.current_speed)
                 self.current_mission = new_mission
                 controller.send_command(new_mission)  # sends "f" as-is
                 return True
@@ -65,6 +70,7 @@ class Mission:
                     speed = int(parts[1])
                     if 0 <= speed <= 255:
                         self.telemetry.update("speed", speed)
+                        self.current_speed = speed
                         self.current_mission = new_mission
                         controller.send_command(new_mission)
                         return True
@@ -123,6 +129,38 @@ class Mission:
                 return True
             else:
                 print(f"[MISSION] Invalid park command format. Use: 'park'")
+                return False
+        if cmd == "lon":
+            if len(parts) == 1:
+                self.current_mission = new_mission
+                controller.send_command(new_mission)
+                return True
+            else:
+                print(f"[MISSION] Invalid lane following command format. Use: 'lon'")
+                return False
+        if cmd == "loff":
+            if len(parts) == 1:
+                self.current_mission = new_mission
+                controller.send_command(new_mission)
+                return True
+            else:
+                print(f"[MISSION] Invalid lane following command format. Use: 'lon'")
+                return False
+        if cmd == "flashon":
+            if len(parts) == 1:
+                self.current_mission = new_mission
+                controller.send_command(new_mission)
+                return True
+            else:
+                print(f"[MISSION] Invalid flash command format. Use: 'flashon'")
+                return False
+        if cmd == "flashoff":
+            if len(parts) == 1:
+                self.current_mission = new_mission
+                controller.send_command(new_mission)
+                return True
+            else:
+                print(f"[MISSION] Invalid flash command format. Use: 'flashoff'")
                 return False
         
         print(f"[MISSION] Invalid mission: '{new_mission}'")

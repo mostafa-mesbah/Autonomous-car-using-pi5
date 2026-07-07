@@ -10,8 +10,7 @@ class TrafficDetector:
     }
 
     STOP_CLASS_NAMES = {   ## "person"
-        "bicycle", "car", "motorcycle",
-        "bus", "train", "truck", "stop sign"
+     "car", "stop sign"
     }
 
     def check_traffic(self, detections):
@@ -27,13 +26,13 @@ class TrafficDetector:
 
                 elif cls == "green_light" and conf > 0.6:
                     print(f"[TRAFFIC] 🟢 GREEN LIGHT detected ({conf:.2f})")
-                    return "f", "green_light"
+                    return "f 100", "green_light"
 
                 elif cls in ("bump_sign", "yellow_light") and conf > 0.6:
                     print(f"[TRAFFIC] {cls} detected ({conf:.2f}) - SLOW DOWN")
                     return "f 50", cls
 
-                elif cls == "parking_area" and conf > 0.7:
+                elif cls == "parking_area" and conf > 0.95:
                     print(f"[TRAFFIC] Parking area detected ({conf:.2f})")
                     return "park", "parking_area"
 
@@ -60,7 +59,7 @@ class TrafficDetector:
 
         for cls, conf, verts, box_area in sorted(detections, key=lambda x: x[1], reverse=True):
             cls = cls.lower()
-            if cls in self.STOP_CLASS_NAMES and conf > 0.8:
+            if cls in self.STOP_CLASS_NAMES and conf > 0.2:
                 print(f"[GENERAL] 🚗 Stop-class detected: {cls} ({conf:.2f})")
                 return "s", cls
             

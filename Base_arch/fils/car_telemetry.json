@@ -1,8 +1,8 @@
 {
   "car_id": "CAR_001",
   "speed": 100,
-  "battery": 99.7,
-  "temperature": 38.9,
+  "battery": 80.7,
+  "temperature": 68.85,
   "gps": {
     "lat": 30.045934,
     "lon": 31.23888
@@ -15,7 +15,8 @@
   "yolo_confidence": 71.9,
   "traffic_override": false,
   "mission": "speed=50",
-  "servo_angle": 134,
-  "timestamp": "2026-06-18T01:58:40",
-  "steering": 119
+  "servo_angle": 140,
+  "timestamp": "2026-07-07T18:23:22",
+  "steering": 119,
+  "speed_limit": 0
 }
